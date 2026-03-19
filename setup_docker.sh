@@ -130,7 +130,6 @@ if ! command -v cloudflared &> /dev/null; then
 fi
 
 echo "Starting Cloudflare Tunnel to map Port 5001..."
-pkill cloudflared || true
 rm -f cloudflared.log
 cloudflared tunnel --url http://127.0.0.1:5001 > cloudflared.log 2>&1 &
 
