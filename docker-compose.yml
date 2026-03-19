@@ -26,7 +26,7 @@ services:
     environment:
       # Use the persistent mapped volume for the client database
       - DB_PATH=/data/soc.db
-      - PARENT_SERVER_URL=http://ccl-director:5005 # Connect directly via Docker's internal network
+      - PARENT_SERVER_URL=${PARENT_SERVER_URL}
       - SECRET_KEY=change-this-to-a-secure-client-key # PRODUCTION SECRET
       # Add API keys here if you want:
       # - OPENAI_API_KEY=your_key
