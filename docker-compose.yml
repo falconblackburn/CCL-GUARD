@@ -11,6 +11,8 @@ services:
       # Use the persistent mapped volume for the parent database
       - DB_PATH=/data/parent_soc.db
       - SECRET_KEY=change-this-to-a-secure-director-key # PRODUCTION SECRET
+    env_file:
+      - .env
     volumes:
       - director_data:/data
     command: gunicorn --bind 0.0.0.0:5005 --workers 4 parent_app:app
@@ -29,6 +31,8 @@ services:
       # Add API keys here if you want:
       # - OPENAI_API_KEY=your_key
       # - EMAIL_FROM=example@gmail.com
+    env_file:
+      - .env
     volumes:
       - client_data:/data
     command: gunicorn --bind 0.0.0.0:5001 --workers 4 app:app
