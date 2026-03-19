@@ -2,10 +2,9 @@ venv/
 .venv/
 __pycache__/
 *.pyc
-*.db
 *.log
 *.zip
-*.txt
+!requirements.txt
 reports/
 reports_test/
 .env

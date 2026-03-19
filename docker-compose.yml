@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  ccl-director:
+    build: .
+    container_name: ccl_director_prod
+    restart: always
+    ports:
+      - "5005:5005"
+    environment:
+      # Use the persistent mapped volume for the parent database
+      - DB_PATH=/data/parent_soc.db
+      - SECRET_KEY=change-this-to-a-secure-director-key # PRODUCTION SECRET
+    volumes:
+      - director_data:/data
+    command: gunicorn --bind 0.0.0.0:5005 --workers 4 parent_app:app
+
+  ccl-client:
+    build: .
+    container_name: ccl_client_prod
+    restart: always
+    ports:
+      - "5001:5001"
+    environment:
+      # Use the persistent mapped volume for the client database
+      - DB_PATH=/data/soc.db
+      - PARENT_SERVER_URL=http://ccl-director:5005 # Connect directly via Docker's internal network
+      - SECRET_KEY=change-this-to-a-secure-client-key # PRODUCTION SECRET
+      # Add API keys here if you want:
+      # - OPENAI_API_KEY=your_key
+      # - EMAIL_FROM=example@gmail.com
+    volumes:
+      - client_data:/data
+    command: gunicorn --bind 0.0.0.0:5001 --workers 4 app:app
+    depends_on:
+      - ccl-director
+
+volumes:
+  # Named volumes ensure database data is preserved even if containers are destroyed
+  director_data:
+  client_data:
