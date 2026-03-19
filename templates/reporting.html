@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCL Guard | Security Reporting</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='executive.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-container {
+            height: 300px;
+        }
+
+        .insight-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .btn-download {
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.3s;
+            text-decoration: none;
+        }
+
+        .btn-download:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-wrapper">
+                <div class="logo">CCL Guard</div>
+                <div class="slogan">Intelligence-Driven Cyber Defense</div>
+            </div>
+            <nav>
+                <a href="/">Dashboard</a>
+                <a href="/incidents">Incidents</a>
+                <a href="/history">Threat Hunting</a>
+                <a href="/report" class="active">Reporting</a>
+                <a href="/logout">Logout</a>
+            </nav>
+        </header>
+
+        <div class="report-header">
+            <div>
+                <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Security Analytics & Reporting</h1>
+                <p class="text-xs" style="color: var(--text-secondary);">Executive summary of recent SOC activity and
+                    attack trends.</p>
+            </div>
+            <a href="/api/generate_report" class="btn-download">
+                <i data-lucide="download"></i> Download PDF Report
+            </a>
+        </div>
+
+        <div class="analytics-grid">
+            <div class="insight-card">
+                <h3 style="margin-bottom: 1rem;"><i data-lucide="pie-chart" style="width: 16px; margin-right: 8px;"></i>
+                    Severity Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="severityChart"></canvas>
+                </div>
+            </div>
+            <div class="insight-card">
+                <h3 style="margin-bottom: 1rem;"><i data-lucide="bar-chart" style="width: 16px; margin-right: 8px;"></i>
+                    Attack Type Prevalence</h3>
+                <div class="chart-container">
+                    <canvas id="attackFreqChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2><i data-lucide="list"></i> Recent Alert Summary (Last 25)</h2>
+            </div>
+            <div class="card-body">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Attack</th>
+                            <th>Severity</th>
+                            <th>Risk Score</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for l in logs %}
+                        <tr>
+                            <td>{{ l[0] }}</td>
+                            <td>{{ l[1] }}</td>
+                            <td><span class="badge badge-{{ l[2]|lower }}">{{ l[2] }}</span></td>
+                            <td>{{ l[3] }}</td>
+                            <td>{{ l[4] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // Data from backend
+        const sevData = {{ sev_count_json | safe }};
+        const atkData = {{ atk_count_json | safe }};
+
+        // Severity Chart
+        new Chart(document.getElementById('severityChart'), {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(sevData),
+                datasets: [{
+                    data: Object.values(sevData),
+                    backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#3b82f6'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#94a3b8' } }
+                }
+            }
+        });
+
+        // Attack Frequency Chart
+        new Chart(document.getElementById('attackFreqChart'), {
+            type: 'bar',
+            data: {
+                labels: Object.keys(atkData),
+                datasets: [{
+                    label: 'Alert Count',
+                    data: Object.values(atkData),
+                    backgroundColor: '#3b82f6',
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    x: { grid: { display: false } }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Threat Hunting | Executive AI SOC</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='executive.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-wrapper">
+                <div class="logo">CCL Guard</div>
+                <div class="slogan">Intelligence-Driven Cyber Defense</div>
+            </div>
+            <nav style="display: flex; align-items: center;">
+                <a href="/">Dashboard</a>
+                <a href="/incidents">Incidents</a>
+                <a href="/history" class="active">Threat Hunting</a>
+                <a href="/report">Reporting</a>
+                <a href="/logout">Logout</a>
+                <button id="theme-toggle" class="badge"
+                    style="margin-left: 1.5rem; background: var(--glass-border); color: var(--text-primary); border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;">
+                    <i data-lucide="sun" id="theme-icon" style="width: 16px;"></i>
+                    <span id="theme-text">Light Mode</span>
+                </button>
+            </nav>
+        </header>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Historical Log Analysis & Threat Hunting</h2>
+                <input type="text" id="search-input" placeholder="Search logs..."
+                    style="background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); padding:0.4rem; border-radius:0.4rem; color:white; font-size:0.8rem;">
+            </div>
+            <div class="card-body scrollable" style="max-height: 600px;">
+                <table id="history-table">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>IP</th>
+                            <th>Attack</th>
+                            <th>Severity</th>
+                            <th>Analysis Summary</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body">
+                        <!-- Loaded via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- THEME ENGINE ---
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const themeText = document.getElementById('theme-text');
+        const html = document.documentElement;
+
+        function setTheme(theme) {
+            html.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            themeIcon.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
+            themeText.innerText = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+            lucide.createIcons();
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = html.getAttribute('data-theme');
+            setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        });
+
+        // Initialize theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme);
+
+        lucide.createIcons();
+
+        let logData = [];
+
+        function loadHistory() {
+            fetch('/api/history')
+                .then(r => r.json())
+                .then(data => {
+                    logData = data;
+                    renderLogs(data);
+                });
+        }
+
+        function renderLogs(data) {
+            const tbody = document.getElementById('history-body');
+            tbody.innerHTML = data.map(l => {
+                if (l.length < 10) return '';
+                return `
+                <tr>
+                    <td><span style="color:var(--accent-blue)">${l[1]}</span></td>
+                    <td><code>${l[2]}</code></td>
+                    <td>${l[5]}</td>
+                    <td><span class="badge badge-${(l[6] || 'low').toString().toLowerCase()}">${l[6]}</span></td>
+                    <td class="text-xs" style="max-width:500px; color: var(--text-secondary); white-space: pre-wrap;">${l[9] ? l[9] : 'N/A'}</td>
+                    <td class="text-xs">${l[13] || 'N/A'}</td>
+                </tr>
+            `}).join('');
+        }
+
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const filtered = logData.filter(l =>
+                l[1].toLowerCase().includes(term) ||
+                l[2].toLowerCase().includes(term) ||
+                l[5].toLowerCase().includes(term) ||
+                (l[9] && l[9].toLowerCase().includes(term))
+            );
+            renderLogs(filtered);
+        });
+
+        loadHistory();
+    </script>
+</body>
+
+</html>

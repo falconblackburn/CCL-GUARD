@@ -1,0 +1,14 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.log
+*.zip
+*.txt
+reports/
+reports_test/
+.env
+.DS_Store
+CCL_Guard_*/
+CCL_Guard_Final_Deploy/

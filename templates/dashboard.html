@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive AI SOC | Intelligence Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='executive.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-wrapper">
+                <div class="logo">CCL Guard</div>
+                <div class="slogan">Intelligence-Driven Cyber Defense</div>
+            </div>
+            <nav style="display: flex; align-items: center;">
+                <a href="/" class="active">Dashboard</a>
+                <a href="/incidents">Incidents</a>
+                <a href="/history">Threat Hunting</a>
+                <a href="/report">Reporting</a>
+                <a href="/logout">Logout</a>
+                <button id="theme-toggle" class="badge"
+                    style="margin-left: 1.5rem; background: var(--glass-border); color: var(--text-primary); border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;">
+                    <i data-lucide="sun" id="theme-icon" style="width: 16px;"></i>
+                    <span id="theme-text">Light Mode</span>
+                </button>
+            </nav>
+        </header>
+
+        <!-- Executive Stats -->
+        <div class="dashboard-grid">
+            <div class="stat-card">
+                <h3>Global Threat Level</h3>
+                <div class="value" style="color: {{ threat_color }}">{{ threat_level }}</div>
+                <p class="text-xs mt-2" style="color: var(--text-secondary)">Active monitoring of {{ unique_sources }}
+                    distinct sources</p>
+            </div>
+            <div class="stat-card">
+                <h3>Detected Attacks</h3>
+                <div class="value">{{ total_attacks }}</div>
+                <p class="text-xs mt-2" style="color: var(--text-secondary)">Total logged events</p>
+            </div>
+            <div class="stat-card">
+                <h3>Open Incidents</h3>
+                <div class="value">{{ open_incidents_count }}</div>
+                <p class="text-xs mt-2"
+                    style="color: {% if critical_incidents > 0 %}var(--danger){% else %}var(--text-secondary){% endif %}">
+                    {{ critical_incidents }} Critical requiring action
+                </p>
+            </div>
+            <div class="stat-card">
+                <h3>Offending Countries</h3>
+                <div class="value" style="color: var(--accent-purple)">{{ unique_countries }}</div>
+                <p class="text-xs mt-2" style="color: var(--text-secondary)">Global threat origins</p>
+            </div>
+        </div>
+
+        <!-- Investigation Metrics -->
+        <h2 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="line-chart"></i> Strategic Analytics (MTTD / MTTI / MTTR)
+        </h2>
+        <div class="dashboard-grid" style="margin-bottom: 2rem;">
+            <div class="stat-card" style="border-bottom: 2px solid var(--accent-blue);">
+                <p class="text-xs" style="color: var(--text-secondary)">Mean Time to Detect (MTTD)</p>
+                <div class="value" style="font-size: 1.5rem;">{{ metrics.mttd }} <span
+                        style="font-size: 0.8rem;">min</span></div>
+            </div>
+            <div class="stat-card" style="border-bottom: 2px solid var(--warning);">
+                <p class="text-xs" style="color: var(--text-secondary)">Mean Time to Investigate (MTTI)</p>
+                <div class="value" style="font-size: 1.5rem;">{{ metrics.mtti }} <span
+                        style="font-size: 0.8rem;">min</span></div>
+            </div>
+            <div class="stat-card" style="border-bottom: 2px solid var(--success);">
+                <p class="text-xs" style="color: var(--text-secondary)">Mean Time to Respond (MTTR)</p>
+                <div class="value" style="font-size: 1.5rem;">{{ metrics.mttr }} <span
+                        style="font-size: 0.8rem;">min</span></div>
+            </div>
+            <div class="stat-card">
+                <p class="text-xs" style="color: var(--text-secondary)">Automation Maturity</p>
+                <div class="value" style="font-size: 1.5rem; color: var(--accent-blue);">Lvl 4</div>
+                <p class="text-xs" style="color: var(--text-secondary)">Autonomous Triage Active</p>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <!-- Analytics Column -->
+            <div class="left-col">
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i data-lucide="bar-chart-3"></i> Attack Distribution</h2>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="attackChart" style="max-height: 200px;"></canvas>
+                    </div>
+                </div>
+
+                <!-- Real-time Intelligence -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i data-lucide="shield-alert"></i> Live Threat Intelligence</h2>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <span class="text-xs" style="color: var(--text-secondary)">Filter Severity:</span>
+                            <select id="severity-filter" class="badge"
+                                style="background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--glass-border); padding: 0.2rem 0.5rem; outline: none; cursor: pointer;">
+                                <option value="all">All Levels</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                            <span class="badge badge-low">Real-time Ingestion</span>
+                        </div>
+                    </div>
+                    <div class="card-body scrollable">
+                        <table id="logs-table">
+                            <thead>
+                                <tr>
+                                    <th>Source</th>
+                                    <th>IP / Entity</th>
+                                    <th>Attack Type</th>
+                                    <th>Severity</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in logs %}
+                                <tr>
+                                    <td><span class="text-xs" style="color:var(--accent-blue)">{{ log[1] }}</span></td>
+                                    <td><code>{{ log[2] }}</code> <br> <span class="text-xs opacity-50">{{ log[3]
+                                            }}</span></td>
+                                    <td><strong>{{ log[5] }}</strong> <br> <span class="text-xs opacity-50">Risk: {{
+                                            log[7] }}%</span></td>
+                                    <td><span class="badge badge-{{ log[6]|lower }}">{{ log[6] }}</span></td>
+                                    <td><button class="text-xs btn-link"
+                                            onclick="viewAnalysis('{{ log[0] }}')">Analyze</button></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i data-lucide="Zap"></i> AI Remediation Engine</h2>
+                    </div>
+                    <div class="card-body" id="analysis-container">
+                        <div style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                            <i data-lucide="cpu"
+                                style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5;"></i>
+                            <p>Select a threat to generate deep AI analysis and remediation plan.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Side Panels -->
+            <div class="side-col">
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i data-lucide="crosshair"></i> Top Offending IPs</h2>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="offenderChart" style="max-height: 150px; margin-bottom: 1rem;"></canvas>
+
+                        <div class="scrollable" style="max-height: 250px;">
+                            <table class="text-xs" style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid var(--glass-border); text-align: left;">
+                                        <th style="padding: 0.5rem 0;">IP Address</th>
+                                        <th style="padding: 0.5rem 0; text-align: center;">Total</th>
+                                        <th style="padding: 0.5rem 0; text-align: right;">High</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for off in top_ips %}
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                        <td style="padding: 0.5rem 0;"><code>{{ off.ip }}</code></td>
+                                        <td style="padding: 0.5rem 0; text-align: center;">{{ off.total }}</td>
+                                        <td style="padding: 0.5rem 0; text-align: right;">
+                                            <span class="badge badge-high" style="font-size: 0.6rem;">{{ off.high
+                                                }}</span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Agentic Assistant Chat -->
+    <div id="assistant-widget" class="card"
+        style="position: fixed; bottom: 2rem; right: 2rem; width: 350px; height: 450px; display: flex; flex-direction: column; z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--accent-blue);">
+        <div class="card-header"
+            style="cursor: pointer; display: flex; justify-content: space-between; align-items: center;"
+            onclick="toggleAssistant()">
+            <h2 style="font-size: 0.9rem;"><i data-lucide="bot" style="width: 16px;"></i> Agentic Assistant</h2>
+            <i data-lucide="chevron-down" id="assistant-chevron" style="width: 16px;"></i>
+        </div>
+        <div id="assistant-body"
+            style="flex: 1; display: flex; flex-direction: column; overflow: hidden; height: 380px;">
+            <div id="chat-history"
+                style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.8rem; background: rgba(0,0,0,0.2);">
+                <div
+                    style="background: var(--glass-border); padding: 0.75rem; border-radius: 0.5rem; align-self: flex-start; max-width: 85%;">
+                    Hello! I am your Agentic SOC Assistant. You can ask me to summarize recent threats or explain
+                    specific incidents. How can I help?
+                </div>
+            </div>
+            <div style="padding: 0.75rem; border-top: 1px solid var(--glass-border); display: flex; gap: 0.5rem;">
+                <input type="text" id="assistant-input" placeholder="Ask the SOC..."
+                    style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 0.25rem; color: white; padding: 0.5rem; outline: none; font-size: 0.8rem;">
+                <button onclick="sendAssistantQuery()"
+                    style="background: var(--accent-blue); color: white; border: none; border-radius: 0.25rem; padding: 0.5rem; cursor: pointer;"><i
+                        data-lucide="send" style="width: 14px;"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- THEME ENGINE ---
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const themeText = document.getElementById('theme-text');
+        const html = document.documentElement;
+
+        function setTheme(theme) {
+            html.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            themeIcon.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
+            themeText.innerText = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+            lucide.createIcons();
+
+            // Update chart colors if exists
+            if (window.attackChartInstance) {
+                const isDark = theme === 'dark';
+                window.attackChartInstance.options.scales.y.grid.color = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+                window.attackChartInstance.options.scales.y.ticks.color = isDark ? '#94a3b8' : '#64748b';
+                window.attackChartInstance.options.scales.x.ticks.color = isDark ? '#94a3b8' : '#64748b';
+                window.attackChartInstance.update();
+            }
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = html.getAttribute('data-theme');
+            setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        });
+
+        // Initialize theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme);
+
+        lucide.createIcons();
+
+        // --- DASHBOARD ANALYTICS ---
+        const logsData = {{ logs| tojson | safe }};
+        const topIpsData = {{ top_ips| tojson | safe }};
+        const counts = {};
+        logsData.forEach(l => {
+            const type = l[5];
+            counts[type] = (counts[type] || 0) + 1;
+        });
+
+        const ctx = document.getElementById('attackChart').getContext('2d');
+        window.attackChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(counts),
+                datasets: [{
+                    label: 'Attacks Detected',
+                    data: Object.values(counts),
+                    backgroundColor: 'rgba(56, 189, 248, 0.4)',
+                    borderColor: 'rgba(56, 189, 248, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: html.getAttribute('data-theme') === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' },
+                        ticks: { color: html.getAttribute('data-theme') === 'dark' ? '#94a3b8' : '#64748b' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: html.getAttribute('data-theme') === 'dark' ? '#94a3b8' : '#64748b' }
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        // --- OFFENDER CHART ---
+        const offenderCtx = document.getElementById('offenderChart').getContext('2d');
+        new Chart(offenderCtx, {
+            type: 'bar',
+            data: {
+                labels: topIpsData.map(d => d.ip),
+                datasets: [
+                    {
+                        label: 'High/Critical',
+                        data: topIpsData.map(d => d.high),
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)'
+                    },
+                    {
+                        label: 'Medium',
+                        data: topIpsData.map(d => d.medium),
+                        backgroundColor: 'rgba(245, 158, 11, 0.7)'
+                    },
+                    {
+                        label: 'Low',
+                        data: topIpsData.map(d => d.low),
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)'
+                    }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: { display: false }
+                    },
+                    y: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8', font: { size: 10 } }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+
+
+        // --- SEVERITY FILTER ---
+        const severityFilter = document.getElementById('severity-filter');
+        const logRows = document.querySelectorAll('#logs-table tbody tr');
+
+        severityFilter.addEventListener('change', (e) => {
+            const val = e.target.value.toLowerCase();
+            logRows.forEach(row => {
+                const sevBadge = row.querySelector('.badge');
+                if (!sevBadge) return;
+                const sev = sevBadge.innerText.trim().toLowerCase();
+                if (val === 'all' || sev === val) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+
+        function viewAnalysis(logId) {
+            const container = document.getElementById('analysis-container');
+            container.innerHTML = '<div style="text-align: center; padding: 2rem;"><p>AI is processing security layers...</p></div>';
+
+            fetch('/api/history')
+                .then(r => r.json())
+                .then(logs => {
+                    const log = logs.find(l => l[0] == logId);
+                    if (log) {
+                        renderAnalysis(log);
+                    }
+                });
+        }
+
+        function renderAnalysis(log) {
+            const container = document.getElementById('analysis-container');
+            container.innerHTML = `
+                <div class="ai-report">
+                    <h4><i data-lucide="bot" style="width:16px; margin-right:8px;"></i> AI THREAT ANALYSIS</h4>
+                    <p style="font-size: 0.875rem; line-height: 1.5;">${log[9]}</p>
+                </div>
+                <div class="ai-remediation">
+                    <h4><i data-lucide="check-circle" style="width:16px; margin-right:8px;"></i> RECOMMENDED REMEDIATION</h4>
+                    <p style="font-size: 0.875rem; line-height: 1.5; white-space: pre-line;">${log[10]}</p>
+                </div>
+                <div class="mt-2" style="display:flex; justify-content: flex-end;">
+                    <button class="badge" style="background: var(--accent-blue); color: white; border: none; cursor: pointer; padding: 0.5rem 1rem;">Deploy Remediation</button>
+                </div>
+            `;
+            lucide.createIcons();
+        }
+        // --- AGENTIC ASSISTANT ---
+        let assistantExpanded = true;
+        function toggleAssistant() {
+            const body = document.getElementById('assistant-body');
+            const chev = document.getElementById('assistant-chevron');
+            assistantExpanded = !assistantExpanded;
+            body.style.display = assistantExpanded ? 'flex' : 'none';
+            document.getElementById('assistant-widget').style.height = assistantExpanded ? '450px' : 'auto';
+            chev.style.transform = assistantExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+        }
+
+
+        async function sendAssistantQuery() {
+            const input = document.getElementById('assistant-input');
+            const history = document.getElementById('chat-history');
+            const query = input.value.trim();
+            if (!query) return;
+
+            // User message
+            const uMsg = document.createElement('div');
+            uMsg.style.cssText = "background: var(--accent-blue); padding: 0.75rem; border-radius: 0.5rem; align-self: flex-end; max-width: 85%; color: white;";
+            uMsg.innerText = query;
+            history.appendChild(uMsg);
+            input.value = '';
+            history.scrollTop = history.scrollHeight;
+
+            // Loading indicator
+            const lMsg = document.createElement('div');
+            lMsg.style.cssText = "background: var(--glass-border); padding: 0.75rem; border-radius: 0.5rem; align-self: flex-start; max-width: 85%; font-style: italic; opacity: 0.7;";
+            lMsg.innerText = "Agent is reasoning...";
+            history.appendChild(lMsg);
+
+            try {
+                const res = await fetch('/api/assistant', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                const data = await res.json();
+                lMsg.innerText = data.response;
+                lMsg.style.fontStyle = 'normal';
+                lMsg.style.opacity = '1';
+                history.scrollTop = history.scrollHeight;
+            } catch (err) {
+                lMsg.innerText = "Error connecting to Agentic Engine.";
+            }
+        }
+
+        document.getElementById('assistant-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendAssistantQuery();
+        });
+    </script>
+    <style>
+        .btn-link {
+            background: none;
+            border: none;
+            color: var(--accent-blue);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+    </style>
+</body>
+
+</html>

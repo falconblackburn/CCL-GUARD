@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCL Guard | Director Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='executive.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        .director-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .client-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .client-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-blue);
+        }
+
+        .client-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .client-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        .status-online {
+            background-color: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+
+        .status-offline {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+        }
+
+        .btn-assist {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(59, 130, 246, 0.1);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 1rem;
+            width: 100%;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .btn-assist:hover {
+            background: rgba(59, 130, 246, 0.2);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-wrapper">
+                <div class="logo">CCL Guard Director</div>
+                <div class="slogan">Global Fleet Management</div>
+            </div>
+            <nav style="display: flex; align-items: center;">
+                <a href="/" class="active">Fleet Overview</a>
+            </nav>
+        </header>
+
+        <div class="director-grid">
+            <div class="stat-card">
+                <h3>Managed Instances</h3>
+                <div class="value">{{ total_clients }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Active Fleet Status</h3>
+                <div class="value" style="color: #10b981;">{{ online_count }} Online</div>
+            </div>
+            <div class="stat-card">
+                <h3>Global Open Incidents</h3>
+                <div class="value" style="color: #ef4444">{{ total_incidents }}</div>
+            </div>
+        </div>
+
+        <h2 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="server"></i> Customer Deployments
+        </h2>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
+            {% for client in clients %}
+            <div class="client-card">
+                <div class="client-header">
+                    <span class="client-name">{{ client.name }}</span>
+                    <span class="text-xs" style="color: var(--text-secondary)">
+                        <span
+                            class="status-dot {% if client.status == 'Online' %}status-online{% else %}status-offline{% endif %}"></span>
+                        {{ client.status }}
+                    </span>
+                </div>
+                <div style="margin-bottom: 0.5rem;">
+                    <span class="text-xs" style="color: var(--text-secondary)">Active Incidents:</span>
+                    <span
+                        class="badge {% if client.active_incidents > 0 %}badge-critical{% else %}badge-low{% endif %}">
+                        {{ client.active_incidents }}
+                    </span>
+                </div>
+                <div class="text-xs" style="color: var(--text-secondary);">
+                    Last Seen: {{ client.last_seen }}
+                </div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <a href="{{ client.url }}" target="_blank" class="btn-assist" style="margin-top: 0; flex: 2;">
+                        <i data-lucide="external-link" style="width: 14px;"></i> Assist
+                    </a>
+                    <button onclick="pushUpdate(event, {{ client.id }})" class="btn-assist"
+                        style="margin-top: 0; flex: 1; border-color: rgba(16, 185, 129, 0.2); color: #10b981; background: rgba(16, 185, 129, 0.1);">
+                        <i data-lucide="upload-cloud" style="width: 14px;"></i> Push
+                    </button>
+                </div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                    <button onclick="toggleStatus({{ client.id }}, {{ (client.status != 'Disabled') | lower }})"
+                        class="btn-assist" style="margin-top: 0; font-size: 0.7rem; padding: 0.3rem;">
+                        {{ 'Disable' if client.status != 'Disabled' else 'Enable' }}
+                    </button>
+                    <button onclick="removeClient({{ client.id }}, '{{ client.name }}')" class="btn-assist"
+                        style="margin-top: 0; font-size: 0.7rem; padding: 0.3rem; border-color: rgba(239, 68, 68, 0.2); color: #ef4444; background: rgba(239, 68, 68, 0.1);">
+                        Remove
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+            {% if not clients %}
+            <p style="color: var(--text-secondary)">No client instances have registered yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+
+        async function removeClient(id, name) {
+            if (confirm(`Are you sure you want to remove ${name}?`)) {
+                const resp = await fetch(`/api/client/delete/${id}`, { method: 'POST' });
+                if (resp.ok) window.location.reload();
+                else alert("Failed to delete client");
+            }
+        }
+
+        async function toggleStatus(id, isDisabled) {
+            console.log(`Toggling status for client ${id}, disable=${isDisabled}`);
+            const resp = await fetch(`/api/client/toggle_status/${id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ disabled: isDisabled })
+            });
+            if (resp.ok) window.location.reload();
+            else alert("Failed to update status");
+        }
+
+        async function pushUpdate(event, id) {
+            const btn = event.currentTarget;
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin" style="width: 14px;"></i> Pushing...';
+            lucide.createIcons();
+
+            try {
+                const resp = await fetch(`/api/client/push_update/${id}`, { method: 'POST' });
+                const data = await resp.json();
+                if (resp.ok) alert("Update pushed successfully!");
+                else alert("Update failed: " + data.error);
+            } catch (e) {
+                alert("Error pushing update");
+            } finally {
+                btn.innerHTML = originalContent;
+                lucide.createIcons();
+            }
+        }
+
+        // Auto refresh every 60 seconds
+        setTimeout(() => { window.location.reload(); }, 60000);
+    </script>
+</body>
+
+</html>

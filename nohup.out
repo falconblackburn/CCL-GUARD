@@ -1,0 +1,5 @@
+[parent.db] Initialization Complete.
+ * Serving Flask app 'parent_app'
+ * Debug mode: off
+Address already in use
+Port 5005 is in use by another program. Either identify and stop that program, or start the server with a different port.

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incidents | Executive AI SOC</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='executive.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-wrapper">
+                <div class="logo">CCL Guard</div>
+                <div class="slogan">Intelligence-Driven Cyber Defense</div>
+            </div>
+            <nav style="display: flex; align-items: center;">
+                <a href="/">Dashboard</a>
+                <a href="/incidents" class="active">Incidents</a>
+                <a href="/history">Threat Hunting</a>
+                <a href="/report">Reporting</a>
+                <a href="/logout">Logout</a>
+                <button id="theme-toggle" class="badge"
+                    style="margin-left: 1.5rem; background: var(--glass-border); color: var(--text-primary); border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;">
+                    <i data-lucide="sun" id="theme-icon" style="width: 16px;"></i>
+                    <span id="theme-text">Light Mode</span>
+                </button>
+            </nav>
+        </header>
+
+        <div class="card">
+            <div class="card-header">
+                <div style="display:flex; gap:1.5rem; align-items: center;">
+                    <h2 id="tab-active" class="tab active" onclick="switchTab('Open')">Active Incidents</h2>
+                    <h2 id="tab-closed" class="tab" onclick="switchTab('Closed')">Closed Archive</h2>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <span class="text-xs" style="color: var(--text-secondary)">Filter Severity:</span>
+                    <select id="severity-filter" class="badge"
+                        style="background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--glass-border); outline: none; cursor: pointer;">
+                        <option value="all">All Levels</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                    <span class="badge badge-medium" id="incident-count">Loading...</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <table id="incidents-table">
+                    <thead>
+                        <tr>
+                            <th>Icon</th>
+                            <th>ID</th>
+                            <th>Attack</th>
+                            <th>Severity</th>
+                            <th>Risk</th>
+                            <th>Status</th>
+                            <th>Time</th>
+                            <th id="th-action">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="incidents-body">
+                        <!-- Loaded via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resolution Modal -->
+    <div id="resolve-modal" class="modal">
+        <div class="modal-content card">
+            <div class="card-header">
+                <h2>Resolve Incident</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-xs" style="color:var(--text-secondary); margin-bottom:1rem;">Please provide a closing
+                    summary for the audit trail.</p>
+                <textarea id="resolve-comment"
+                    style="width:100%; height:100px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:0.5rem; color:white; padding:0.75rem;"></textarea>
+                <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+                    <button class="badge" onclick="closeModal()"
+                        style="background:var(--bg-card); border:1px solid var(--glass-border); color:white; cursor:pointer;">Cancel</button>
+                    <button class="badge" onclick="submitResolution()"
+                        style="background:var(--accent-blue); border:none; color:white; cursor:pointer;">Submit
+                        Resolution</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Modal -->
+    <div id="feedback-modal" class="modal">
+        <div class="modal-content card">
+            <div class="card-header">
+                <h2><i data-lucide="edit-3"></i> Agentic Learning</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-xs" style="color:var(--text-secondary); margin-bottom:1rem;">Correct the AI's reasoning.
+                    Your feedback will be used to improve future autonomous investigations.</p>
+                <textarea id="feedback-text"
+                    style="width:100%; height:100px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:0.5rem; color:white; padding:0.75rem;"></textarea>
+                <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+                    <button class="badge" onclick="closeFeedbackModal()"
+                        style="background:var(--bg-card); border:1px solid var(--glass-border); color:white; cursor:pointer;">Cancel</button>
+                    <button class="badge" onclick="submitFeedback()"
+                        style="background:var(--warning); color:black; border:none; cursor:pointer;">Submit
+                        Feedback</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- THEME ENGINE ---
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const themeText = document.getElementById('theme-text');
+        const html = document.documentElement;
+
+        function setTheme(theme) {
+            html.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            themeIcon.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
+            themeText.innerText = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+            lucide.createIcons();
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = html.getAttribute('data-theme');
+            setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        });
+
+        // Initialize theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme);
+
+        lucide.createIcons();
+        let currentStatus = 'Open';
+        let pendingResolveId = null;
+        let incidentData = [];
+
+        function switchTab(status) {
+            currentStatus = status;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(status === 'Open' ? 'tab-active' : 'tab-closed').classList.add('active');
+            document.getElementById('th-action').style.display = status === 'Open' ? 'table-cell' : 'none';
+            renderIncidents();
+        }
+
+        function loadIncidents() {
+            fetch('/api/incidents')
+                .then(r => r.json())
+                .then(data => {
+                    incidentData = data;
+                    renderIncidents();
+                });
+        }
+
+        function renderIncidents() {
+            const sevFilter = document.getElementById('severity-filter').value.toLowerCase();
+            const filtered = incidentData.filter(i => {
+                const matchesStatus = i[5] === currentStatus;
+                const matchesSeverity = sevFilter === 'all' || i[2].toLowerCase() === sevFilter;
+                return matchesStatus && matchesSeverity;
+            });
+
+            document.getElementById('incident-count').innerText = `${filtered.length} ${currentStatus} Incidents`;
+
+            const tbody = document.getElementById('incidents-body');
+            tbody.innerHTML = filtered.map(i => `
+                        <tr>
+                            <td onclick="toggleDetails(${i[0]})" style="cursor:pointer;"><i data-lucide="chevron-right" id="chevron-${i[0]}" style="width:16px;"></i></td>
+                            <td>#${i[0]}</td>
+                            <td>
+                                <strong>${i[1]}</strong>
+                                ${currentStatus === 'Closed' ? `<br><span class="text-xs" style="color:var(--accent-blue)">Resolution: ${i[8] || 'No comment'} - ${i[12]}</span>` : ''}
+                            </td>
+                            <td><span class="badge badge-${(i[2] || 'low').toLowerCase()}">${i[2]}</span></td>
+                            <td>${i[3]}%</td>
+                            <td>${i[5]}</td>
+                            <td>${i[14]}</td>
+                            <td style="${currentStatus === 'Closed' ? 'display:none' : ''}">
+                                <button class="btn-link" onclick="openResolveModal(${i[0]})">Resolve</button>
+                            </td>
+                        </tr>
+                        <tr id="details-${i[0]}" class="details-row" style="display:none;">
+                            <td colspan="8">
+                                <div class="details-container card">
+                                    <div class="main-grid" style="grid-template-columns: 1fr 1fr; gap:1rem; padding:1rem;">
+                                        <div class="ai-report" style="margin:0;">
+                                            <h4 class="text-xs" style="color:var(--accent-blue); margin-bottom:0.5rem;"><i data-lucide="info" style="width:12px; margin-right:4px;"></i> AI SUMMARY</h4>
+                                            <p class="text-xs">${i[9] || 'No summary available.'}</p>
+                                        </div>
+                                        <div class="ai-remediation" style="margin:0;">
+                                            <h4 class="text-xs" style="color:var(--success); margin-bottom:0.5rem;"><i data-lucide="check-circle" style="width:12px; margin-right:4px;"></i> REMEDIATION STEPS</h4>
+                                            <p class="text-xs" style="white-space: pre-line;">${i[10] || 'No remediation steps provided.'}</p>
+                                        </div>
+                                    </div>
+                                    <div style="padding: 0 1rem 1rem 1rem; border-top: 1px solid var(--glass-border); padding-top:0.5rem; display:flex; justify-content:space-between; align-items:center;">
+                                        <div>
+                                            <span class="text-xs" style="opacity:0.6;">MITRE ATT&CK Phase: <strong>${i[4]}</strong></span>
+                                            <span class="text-xs" style="opacity:0.6; margin-left:1rem;">Source: <strong>${i[6]}</strong></span>
+                                        </div>
+                                        <div style="display:flex; gap:0.5rem;">
+                                            <button class="badge" style="background:var(--success); color:white; border:none; cursor:pointer;" onclick="approveAction(${i[0]})">Approve Action</button>
+                                            <button class="badge" style="background:var(--warning); color:black; border:none; cursor:pointer;" onclick="openFeedbackModal(${i[0]})">Correct AI</button>
+                                            <a href="/api/incident_report/${i[0]}" target="_blank" class="badge" style="background:var(--accent-blue); color:white; border:none; cursor:pointer; text-decoration:none;">View Report</a>
+                                        </div>
+                                    </div>
+                                    ${i[12] ? `<div style="padding: 0.5rem 1rem; background:rgba(255,165,0,0.1); border-top:1px solid var(--warning);"><span class="text-xs" style="color:var(--warning);"><strong>Analyst Feedback:</strong> ${i[12]}</span></div>` : ''}
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('');
+            lucide.createIcons();
+        }
+
+
+        function toggleDetails(id) {
+            const row = document.getElementById(`details-${id}`);
+            const chevron = document.getElementById(`chevron-${id}`);
+            const isHidden = row.style.display === 'none';
+            row.style.display = isHidden ? 'table-row' : 'none';
+            chevron.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+
+            if (isHidden && currentStatus === 'Open') {
+                // Mark as processed (under investigation) for MTTI
+                fetch('/api/incident/mark_processed/' + id, { method: 'POST' });
+            }
+        }
+
+        function openResolveModal(id) {
+            pendingResolveId = id;
+            document.getElementById('resolve-modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('resolve-modal').style.display = 'none';
+            document.getElementById('resolve-comment').value = '';
+        }
+
+        function submitResolution() {
+            const comment = document.getElementById('resolve-comment').value;
+            if (!comment) return alert('Comment required');
+
+            fetch('/close_incident/' + pendingResolveId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ comment })
+            }).then(() => {
+                closeModal();
+                loadIncidents();
+            });
+        }
+
+        function openFeedbackModal(id) {
+            pendingFeedbackId = id;
+            document.getElementById('feedback-modal').style.display = 'flex';
+        }
+
+        function closeFeedbackModal() {
+            document.getElementById('feedback-modal').style.display = 'none';
+            document.getElementById('feedback-text').value = '';
+        }
+
+        function submitFeedback() {
+            const feedback = document.getElementById('feedback-text').value;
+            if (!feedback) return alert('Feedback required');
+
+            fetch('/submit_feedback/' + pendingFeedbackId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ feedback })
+            }).then(() => {
+                closeFeedbackModal();
+                loadIncidents();
+            });
+        }
+
+        function approveAction(id) {
+            fetch('/approve_incident/' + id, { method: 'POST' })
+                .then(() => loadIncidents());
+        }
+
+        document.getElementById('severity-filter').addEventListener('change', renderIncidents);
+
+        switchTab('Open');
+        loadIncidents();
+    </script>
+    <style>
+        .tab {
+            cursor: pointer;
+            opacity: 0.5;
+            transition: 0.3s;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab.active {
+            opacity: 1;
+            border-bottom: 2px solid var(--accent-blue);
+        }
+
+        .btn-link {
+            background: none;
+            border: none;
+            color: var(--accent-blue);
+            cursor: pointer;
+            text-decoration: underline;
+            font-size: 0.75rem;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            width: 500px;
+        }
+    </style>
+</body>
+
+</html>

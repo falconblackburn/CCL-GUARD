@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | CCL Guard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='executive.css') }}">
+</head>
+
+<body style="display: flex; align-items: center; justify-content: center;">
+    <div class="card" style="width: 400px; padding: 2rem;">
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <div class="logo">CCL Guard</div>
+            <p class="text-xs" style="color: var(--text-secondary); margin-top: 0.5rem;">Intelligence-Driven Cyber
+                Defense</p>
+        </div>
+        <form action="/login" method="POST">
+            <div style="margin-bottom: 1.5rem;">
+                <label
+                    style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem;">USERNAME</label>
+                <input type="text" name="username"
+                    style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); padding: 0.75rem; border-radius: 0.5rem; color: white;">
+            </div>
+            <div style="margin-bottom: 2rem;">
+                <label
+                    style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem;">PASSWORD</label>
+                <input type="password" name="password"
+                    style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); padding: 0.75rem; border-radius: 0.5rem; color: white;">
+            </div>
+            <button type="submit"
+                style="width: 100%; background: linear-gradient(to right, var(--accent-blue), var(--accent-purple)); border: none; padding: 0.75rem; border-radius: 0.5rem; color: white; font-weight: 600; cursor: pointer;">AUTHENTICATE</button>
+        </form>
+        <p class="text-xs" style="text-align: center; margin-top: 1.5rem; color: var(--text-secondary);">Demo Access:
+            admin / admin123</p>
+    </div>
+</body>
+
+</html>

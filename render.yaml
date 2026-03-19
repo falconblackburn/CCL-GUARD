@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: ccl-director-dash
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn parent_app:app"
+    envVars:
+      - key: PORT
+        value: 5005
+      - key: DB_PATH
+        value: /data/parent_soc.db
+    disk:
+      name: director-db
+      mountPath: /data
+      sizeGB: 1
+
+  - type: web
+    name: ccl-client-dash
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
+    envVars:
+      - key: PORT
+        value: 5001
+      - key: PARENT_SERVER_URL
+        value: "https://ccl-director-dash.onrender.com"
+      - key: DB_PATH
+        value: /data/soc.db
+    disk:
+      name: client-db
+      mountPath: /data
+      sizeGB: 1
