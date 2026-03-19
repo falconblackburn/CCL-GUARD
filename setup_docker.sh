@@ -3,8 +3,9 @@ echo "=========================================================="
 echo "   CCL Guard - Docker Automated Setup Wizard              "
 echo "=========================================================="
 echo ""
-echo "This wizard will securely configure your API keys and launch the SOC."
-echo "Your keys will be saved locally in '.env' and NEVER uploaded anywhere."
+echo "This wizard will securely configure your API keys, enterprise"
+echo "integrations, and launch the SOC securely inside Docker."
+echo "Your keys will be saved locally in '.env' and NEVER uploaded."
 echo ""
 
 # Initialize .env file
@@ -29,14 +30,13 @@ if [ -n "$twilio_sid" ]; then
     echo "TWILIO_WHATSAPP_ID=whatsapp:+14155238886" >> .env
     echo "ADMIN_WHATSAPP=$phone_num" >> .env
     echo "✅ Twilio Configured."
-else
-    echo "⏭️  Skipped Twilio configuration."
 fi
 echo ""
 
+# Email
 echo "--- 📧 Email Alerts (Optional) ---"
 read -p "Do you want to enable automatic email alerting? (y/n): " email_choice
-if [ "$email_choice" == "y" ]; then
+if [[ "$email_choice" == "y" || "$email_choice" == "Y" ]]; then
     read -p "Enter Sender Email (e.g. alert@company.com): " email_from
     read -p "Enter Email Password / App Password: " email_pass
     read -p "Enter Destination Email for Alerts: " email_to
@@ -45,8 +45,112 @@ if [ "$email_choice" == "y" ]; then
     echo "EMAIL_PASS=$email_pass" >> .env
     echo "EMAIL_TO=$email_to" >> .env
     echo "✅ Email Alerts Configured."
+fi
+echo ""
+
+# Cloudflare WAF Log Ingestion
+echo "--- 🌍 Cloudflare WAF Log Ingestion (Optional) ---"
+echo "CCL Guard can automatically pull firewall logs from your Cloudflare account."
+read -p "Enable Cloudflare Log Ingestion? (y/n): " cf_choice
+if [[ "$cf_choice" == "y" || "$cf_choice" == "Y" ]]; then
+    read -p "Enter Cloudflare Account Email: " cf_email
+    read -p "Enter Cloudflare Global API Key: " cf_api_key
+    read -p "Enter Cloudflare Zone ID: " cf_zone_id
+    
+    echo "CLOUDFLARE_EMAIL=$cf_email" >> .env
+    echo "CLOUDFLARE_API_KEY=$cf_api_key" >> .env
+    echo "CLOUDFLARE_ZONE_ID=$cf_zone_id" >> .env
+    echo "✅ Cloudflare Log Ingestion Configured."
+fi
+echo ""
+
+# Enterprise SIEM & Cloud
+echo "--- 🏢 Enterprise SIEM & Cloud Integrations (Optional) ---"
+read -p "Configure native AWS, Azure, or Splunk ingestion? (y/n): " ent_choice
+if [[ "$ent_choice" == "y" || "$ent_choice" == "Y" ]]; then
+    echo "- AWS GuardDuty -"
+    read -p "AWS Access Key ID (Leave blank to skip): " aws_key
+    if [ -n "$aws_key" ]; then
+        read -p "AWS Secret Access Key: " aws_secret
+        read -p "AWS Region (e.g. us-east-1): " aws_region
+        echo "AWS_ACCESS_KEY_ID=$aws_key" >> .env
+        echo "AWS_SECRET_ACCESS_KEY=$aws_secret" >> .env
+        echo "AWS_REGION=${aws_region:-us-east-1}" >> .env
+        echo "✅ AWS GuardDuty Polling Configured."
+    fi
+
+    echo "- Azure Monitor / Defender -"
+    read -p "Azure Tenant ID (Leave blank to skip): " az_tenant
+    if [ -n "$az_tenant" ]; then
+        read -p "Azure Client ID: " az_client
+        read -p "Azure Client Secret: " az_secret
+        echo "AZURE_TENANT_ID=$az_tenant" >> .env
+        echo "AZURE_CLIENT_ID=$az_client" >> .env
+        echo "AZURE_CLIENT_SECRET=$az_secret" >> .env
+        echo "✅ Azure Defender Polling Configured."
+    fi
+
+    echo "- Splunk SIEM -"
+    read -p "Splunk Host URL (Leave blank to skip): " splunk_host
+    if [ -n "$splunk_host" ]; then
+        read -p "Splunk API Token: " splunk_token
+        echo "SPLUNK_HOST=$splunk_host" >> .env
+        echo "SPLUNK_TOKEN=$splunk_token" >> .env
+        echo "✅ Splunk SIEM Polling Configured."
+    fi
+fi
+echo ""
+
+# Multi-Tenant Parent Registration
+echo "--- 🌐 Multi-Tenant Parent Registration ---"
+echo "If this instance is managed by a centralized Director SOC, enter the details."
+echo "Leave blank to run strictly isolated."
+read -p "Client/Customer Company Name (e.g. Acme Corp): " client_name
+if [ -n "$client_name" ]; then
+    read -p "Parent Server URL (e.g. https://director.cclguard.com): " parent_url
+    
+    echo "CLIENT_NAME=$client_name" >> .env
+    echo "PARENT_SERVER_URL=$parent_url" >> .env
+    echo "✅ Registered for Centralized Management."
+fi
+echo ""
+
+# Cloudflare Tunnel for secure remote access without port forwarding
+echo "--- 🛡️ Cloudflare Edge Security & Public Access ---"
+echo "Setting up an automated secure tunnel for remote SOC access (No Port Forwarding needed)..."
+if ! command -v cloudflared &> /dev/null; then
+    echo "Installing cloudflared on host..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        brew install cloudflared || echo "⚠️ Could not install cloudflared via brew."
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+        chmod +x cloudflared
+        sudo mv cloudflared /usr/local/bin/ || echo "⚠️ Could not move cloudflared to /usr/local/bin (Try running with sudo next time)."
+    fi
+fi
+
+echo "Starting Cloudflare Tunnel to map Port 5001..."
+pkill cloudflared || true
+cloudflared tunnel --url http://127.0.0.1:5001 > cloudflared.log 2>&1 &
+
+echo "Waiting for Cloudflare to assign a public URL..."
+public_url=""
+max_attempts=15
+attempt=1
+while [ $attempt -le $max_attempts ]; do
+    sleep 1
+    if grep -q 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' cloudflared.log 2>/dev/null; then
+        public_url=$(grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' cloudflared.log | head -1)
+        break
+    fi
+    attempt=$((attempt + 1))
+done
+
+if [ -n "$public_url" ]; then
+    echo "CLIENT_PUBLIC_URL=$public_url" >> .env
+    echo "✅ Public SOC URL Generated: $public_url"
 else
-    echo "⏭️  Skipped Email configuration."
+    echo "⚠️ Failed to extract Cloudflare URL. Check cloudflared.log."
 fi
 echo ""
 
@@ -55,11 +159,23 @@ echo " 🚀 Launching CCL Guard via Docker Compose...             "
 echo "=========================================================="
 
 if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Error: docker-compose is not installed. Please install Docker."
+    echo "❌ Error: docker-compose is not installed. Please install Docker and Docker-Compose."
     exit 1
 fi
 
 docker-compose up -d --build
 
 echo ""
-echo "✅ Deployment Complete! Both the Director and Client are now running securely."
+echo "✅ Deployment Complete! The SOC is now running securely in Docker containers."
+if [ -n "$public_url" ]; then
+    echo "🌍 Client Dashboard is globally accessible at:"
+    echo "    👉 $public_url"
+    echo "    (Hand this secure link to your customer)"
+    echo ""
+    if [ -n "$client_name" ]; then
+        echo "🔗 Your Director node is now continuously tracking '$client_name' using this URL!"
+    fi
+else
+    echo "🌍 Client Dashboard is running locally on Port 5001."
+fi
+echo "=========================================================="
