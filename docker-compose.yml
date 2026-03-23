@@ -23,6 +23,7 @@ services:
     restart: always
     ports:
       - "5001:5001"
+      - "5140:5140/udp" # Fortinet Syslog Ingestion
     environment:
       # Use the persistent mapped volume for the client database
       - DB_PATH=/data/soc.db
