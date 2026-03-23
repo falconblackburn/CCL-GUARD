@@ -48,10 +48,18 @@ def process_and_insert(log_line):
         
     event_type = f"Fortinet {parsed.get('subtype', parsed.get('type', 'Firewall Event')).title()}"
     details = parsed.get("msg", "No message provided by firewall")
-    user_agent = f"FortiOS/{parsed.get('devname', 'UnknownFGT')}"
     
-    # Insert threat directly into the SOC SQLite DB
-    insert_log(ip_address, user_agent, event_type, risk_level, details)
+    # Map to V2 Schema: source, ip, country, raw_data, attack, severity, risk, mitre, ai_analysis, remediation, attack_prob, phase
+    source = "Fortinet"
+    country = "Unknown"
+    risk = "High" if risk_level in ["Critical", "High"] else "Medium"
+    mitre = "T1190"
+    ai_analysis = "Pending analysis"
+    remediation = "Pending"
+    attack_prob = "100%"
+    phase = "Delivery"
+    
+    insert_log(source, ip_address, country, details, event_type, risk_level, risk, mitre, ai_analysis, remediation, attack_prob, phase)
     print(f"[{risk_level}] Ingested Fortinet Threat from {ip_address}: {event_type}")
 
 class SyslogUDPHandler(socketserver.BaseRequestHandler):
