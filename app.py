@@ -896,8 +896,9 @@ def generate_pdf_report():
     import sqlite3
     con = sqlite3.connect(DB_NAME)
     c = con.cursor()
-    c.execute("SELECT ip,attack,severity,risk,time FROM logs ORDER BY id DESC LIMIT 25")
+    c.execute("SELECT ip,attack,severity,risk,time,ai_analysis,source FROM logs ORDER BY id DESC LIMIT 500")
     logs = c.fetchall()
+    con.close()
     
     if not logs:
         return "No alerts found. Please wait for incidents before generating a report.", 400
@@ -914,158 +915,128 @@ def generate_pdf_report():
     plt.close()
 
     atk_count = Counter([l[1] for l in logs])
+    top_5_atk = dict(atk_count.most_common(5))
     plt.figure(figsize=(6, 4))
-    plt.bar(atk_count.keys(), atk_count.values())
-    plt.xticks(rotation=30, ha="right")
-    plt.title("Attack Types")
+    plt.bar(top_5_atk.keys(), top_5_atk.values(), color="#2563eb")
+    plt.xticks(rotation=25, ha="right", fontsize=8)
+    plt.title("Top Threat Vectors", fontweight="bold")
     plt.tight_layout()
     plt.savefig(os.path.join(report_dir, "attacks.png"))
     plt.close()
 
-    # Get insights (duplicated logic for simplicity in this function)
-    critical_count = len([l for l in logs if l[2]=="High" and l[3]>=80])
+    critical_count = len([l for l in logs if l[2] in ["High", "Critical"]])
+    ai_remediated = len([l for l in logs if l[5] and "Pending" not in l[5] and "Routine" not in l[5]])
   
     ips = [l[0] for l in logs]
     attacks = [l[1] for l in logs]
     risks = [(l[0], l[3]) for l in logs]
+    sources = [l[6] for l in logs]
 
     top_attack = Counter(attacks).most_common(1)[0][0]
     top_ip = Counter(ips).most_common(1)[0][0]
+    top_source = Counter(sources).most_common(1)[0][0]
 
-    highest_risk_ip = max(risks, key=lambda x: x[1])[0]
-    highest_risk_score = max(l[3] for l in logs)
+    highest_risk_ip = max(risks, key=lambda x: x[1])[0] if risks else "N/A"
+    highest_risk_score = max((l[3] for l in logs), default=0)
 
     times = [l[4][:13] if l[4] else "Unknown" for l in logs]
-
-    peak_time = Counter(times).most_common(1)[0][0]
-
-    con.close()
+    peak_time = Counter(times).most_common(1)[0][0] + ":00"
 
     styles = getSampleStyleSheet()
+    
+    # Custom heading style
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=24, spaceAfter=20, textColor=colors.HexColor("#0f172a"))
+    sub_style = ParagraphStyle('SubStyle', parent=styles['Normal'], fontSize=12, textColor=colors.gray, spaceAfter=20)
+    exec_style = ParagraphStyle('ExecStyle', parent=styles['Normal'], fontSize=11, leading=16)
 
-    # Use absolute path for reliability
     filename = os.path.join(report_dir, "SOC_Report.pdf")
 
     doc = SimpleDocTemplate(
         filename,
         pagesize=A4,
-        rightMargin=40,
-        leftMargin=40,
-        topMargin=40,
-        bottomMargin=40
+        rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40
     )
 
     elements=[]
 
     # ===== TITLE =====
-    elements.append(Paragraph("""
-<b>CCL Guard Security Platform</b><br/>
-Intelligence-Driven Cyber Defense<br/><br/>
-
-Prepared By: SOC Engineering Team<br/>
-Environment: Customer Production Environment<br/>
-Report ID: GUARD-""" + datetime.datetime.now().strftime("%Y%m%d%H%M") + """
-""",styles["Title"]))
-
-    elements.append(Paragraph(f"Generated: {datetime.datetime.now()}",styles["Normal"]))
+    elements.append(Paragraph("<b>CCL Guard Executive Threat Report</b>", title_style))
+    elements.append(Paragraph(f"AI-Driven SOC Intelligence & Network Telemetry<br/>Generated: {datetime.datetime.now().strftime('%B %d, %Y at %H:%M')}<br/>Report ID: GUARD-{datetime.datetime.now().strftime('%Y%m%d%H%M')}", sub_style))
     elements.append(Spacer(1,10))
-    elements.append(Image(os.path.join(report_dir, "severity.png"), width=250, height=200))
-    elements.append(Spacer(1,10))
-    elements.append(Image(os.path.join(report_dir, "attacks.png"), width=300, height=200))
+    
+    elements.append(Paragraph(f"""
+    <b>EXECUTIVE SUMMARY</b><br/>
+    This report outlines the threat landscape and automated mitigation actions taken by the CCL Guard AI Orchestrator over the last monitoring period.<br/><br/>
+    <b>KEY METRICS & AI TELEMETRY</b><br/>
+    • <b>Events Analyzed:</b> {len(logs)}<br/>
+    • <b>Critical/High Threats:</b> {critical_count}<br/>
+    • <b>AI-Auto Remediated:</b> {ai_remediated} threats intercepted<br/>
+    • <b>Top Threat Vector:</b> {top_attack}<br/>
+    • <b>Primary Attacker IP:</b> {top_ip}<br/>
+    • <b>Highest Risk Target:</b> {highest_risk_ip} (Risk Score: {highest_risk_score}/100)<br/>
+    • <b>Peak Attack Window:</b> {peak_time}<br/>
+    • <b>Primary Sensor:</b> {top_source}<br/>
+    """, exec_style))
+    
+    elements.append(Spacer(1, 15))
+
+    # Add charts in a table
+    img1 = Image(os.path.join(report_dir, "severity.png"), width=220, height=180)
+    img2 = Image(os.path.join(report_dir, "attacks.png"), width=280, height=180)
+    chart_table = Table([[img1, img2]], colWidths=[240, 300])
+    elements.append(chart_table)
     elements.append(Spacer(1,15))
 
-    elements.append(Paragraph(f"""
-<b>Executive Insights</b><br/>
+    # ===== TABLE (Top 15) =====
+    elements.append(Paragraph("<b>TOP 15 CRITICAL INCIDENTS</b>", styles["Heading3"]))
+    table_data=[["Attacker IP", "Attack Type", "Severity", "Risk", "Timestamp/Sensor"]]
 
-Top Attack Vector : {top_attack}<br/>
-Most Active Attacker IP : {top_ip}<br/>
-Highest Risk IP : {highest_risk_ip} (Risk {highest_risk_score})<br/>
-Peak Attack Hour : {peak_time}<br/>
-""", styles["Normal"]))
+    # Sort logs by risk descending
+    sorted_logs = sorted(logs, key=lambda x: x[3], reverse=True)[:15]
 
-    elements.append(Paragraph(f"""
-<b>Executive Summary</b><br/><br/>
-
-Total Alerts: {len(logs)}<br/>
-Critical Incidents: {critical_count}<br/>
-Top Attack Type: {top_attack}<br/>
-Top Attacker IP: {top_ip}<br/>
-Highest Risk IP: {highest_risk_ip}<br/>
-Highest Risk Score: {highest_risk_score}<br/>
-Peak Attack Hour: {peak_time}<br/>
-""", styles["Normal"]))
-
-
-    elements.append(Spacer(1,12))
-
-
-    
-
-    # ===== TABLE =====
-    table_data=[["IP Address","Attack Type","Severity","Risk","Timestamp"]]
-
-    for l in logs:
+    for l in sorted_logs:
         sev=l[2]
-        badge=f"<font color='red'>High</font>" if sev=="High" else \
-              f"<font color='orange'>Medium</font>" if sev=="Medium" else \
-              f"<font color='green'>Low</font>"
+        badge=f"<font color='red'><b>High</b></font>" if sev in ["High","Critical"] else \
+              f"<font color='orange'><b>Medium</b></font>" if sev=="Medium" else \
+              f"<font color='green'><b>Low</b></font>"
 
         table_data.append([
             l[0],
-            l[1],
-            Paragraph(badge,styles["Normal"]),
+            Paragraph(l[1], styles["Normal"]),
+            Paragraph(badge, styles["Normal"]),
             str(l[3]),
-            l[4]
+            Paragraph(f"{l[4][-8:]}<br/>{l[6]}", styles["Normal"])
         ])
 
-    table=Table(table_data,repeatRows=1,colWidths=[90,80,60,50,160])
-
+    table=Table(table_data,repeatRows=1,colWidths=[80,140,60,40,110])
     table.setStyle([
-
         ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0f172a")),
         ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-
         ("FONT",(0,0),(-1,0),"Helvetica-Bold"),
-
-        ("ALIGN",(0,0),(-1,0),"CENTER"),
+        ("ALIGN",(0,0),(-1,-1),"LEFT"),
         ("ALIGN",(2,1),(3,-1),"CENTER"),
-
-        ("GRID",(0,0),(-1,-1),0.25,colors.grey),
-        ("BOTTOMPADDING",(0,0),(-1,0),6),
-
+        ("GRID",(0,0),(-1,-1),0.5,colors.lightgrey),
+        ("BOTTOMPADDING",(0,0),(-1,0),8),
         ("BACKGROUND",(0,1),(-1,-1),colors.whitesmoke)
     ])
-
     elements.append(table)
 
-# ================= RECOMMENDATIONS =================
-    elements.append(Spacer(1,15))
-
+    # ================= RECOMMENDATIONS =================
+    elements.append(Spacer(1,20))
     elements.append(Paragraph(f"""
-<b>Recommended Actions</b><br/><br/>
+    <b>STRATEGIC RECOMMENDATIONS & CISO INSIGHTS</b><br/>
+    <br/>
+    <b>1. Immediate Containment:</b> Disavow routing for IP `<b>{highest_risk_ip}</b>` and globally drop `<b>{top_ip}</b>` at the edge firewall.<br/>
+    <b>2. Vector Hardening:</b> <i>{top_attack}</i> represents the highest volume of inbound attacks. Deploy strict Web Application Firewall (WAF) rate-limiting for this signature type.<br/>
+    <b>3. AI Autonomous Mode:</b> The AI Engine successfully audited {ai_remediated} complex incident(s) without human intervention. Ensure your SIEM integrations (AWS, Azure, Fortinet) maintain 100% uptime for continuous coverage.<br/>
+    <b>4. Threat Hunting:</b> Review the {critical_count} critical incidents identified above for potential lateral movement across endpoints.<br/>
+    """, exec_style))
 
-- Immediately block {highest_risk_ip}<br/>
-- Investigate {critical_count} critical incidents<br/>
-- Enable WAF protections for SQL Injection<br/>
-- Increase firewall sensitivity for Port Scanning<br/>
-- Monitor brute-force attempts for next 24 hours<br/>
-- Review SOC alerts every 30 minutes<br/>
-""",styles["Normal"]))
-
-
-
-
-    elements.append(Spacer(1,15))
-
-    elements.append(Paragraph("""
-Generated by CCL Guard Platform<br/>
-© 2026 CCL Guard Cyber Defense
-""",styles["Normal"]))
+    elements.append(Spacer(1,30))
+    elements.append(Paragraph("""<font color='grey'>Generated securely by CCL Guard Platform | Confidential & Proprietary</font>""",styles["Normal"]))
 
     doc.build(elements)
-
-
-    return send_file(filename, as_attachment=True, download_name="SOC_Report.pdf")
+    return send_file(filename, as_attachment=True, download_name="CCL_Executive_Report.pdf")
 
 
 
