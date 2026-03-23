@@ -2,7 +2,7 @@ import socketserver
 import argparse
 import os
 import re
-from database import insert_log
+from database import insert_log, init_db
 
 # Map Fortinet severity levels to CCL Guard Risk Levels
 SEVERITY_MAP = {
@@ -96,6 +96,9 @@ if __name__ == "__main__":
     parser.add_argument("--import-file", type=str, help="Path to a historical Fortinet log file to ingest")
     
     args = parser.parse_args()
+    
+    # Ensure the database tables exist before importing or listening
+    init_db()
     
     if args.import_file:
         import_historical_logs(args.import_file)
