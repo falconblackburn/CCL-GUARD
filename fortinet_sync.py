@@ -3,6 +3,7 @@ import argparse
 import os
 import re
 from database import insert_log, init_db
+from app import AIAnalysisEngine
 
 # Map Fortinet severity levels to CCL Guard Risk Levels
 SEVERITY_MAP = {
@@ -36,31 +37,37 @@ def process_and_insert(log_line):
     parsed = parse_fortinet_syslog(log_line)
     
     if "srcip" not in parsed:
-        return # Skip logs that don't have a source IP to track
+        return False # Skip logs that don't have a source IP to track
 
     ip_address = parsed.get("srcip", "0.0.0.0")
     level = parsed.get("level", "information").lower()
     risk_level = SEVERITY_MAP.get(level, "Low")
-    
-    # We only care about Medium/High/Critical events for the SOC dashboard
-    if risk_level == "Low":
-        return 
         
     event_type = f"Fortinet {parsed.get('subtype', parsed.get('type', 'Firewall Event')).title()}"
     details = parsed.get("msg", "No message provided by firewall")
     
-    # Map to V2 Schema: source, ip, country, raw_data, attack, severity, risk, mitre, ai_analysis, remediation, attack_prob, phase
+    # Map to V2 Schema
     source = "Fortinet"
     country = "Unknown"
-    risk = "High" if risk_level in ["Critical", "High"] else "Medium"
+    risk = "High" if risk_level in ["Critical", "High"] else ("Medium" if risk_level == "Medium" else "Low")
     mitre = "T1190"
-    ai_analysis = "Pending analysis"
-    remediation = "Pending"
-    attack_prob = "100%"
+    
+    if risk_level in ["Critical", "High"]:
+        try:
+            ai_analysis, remediation = AIAnalysisEngine.analyze(event_type, risk_level, source, ip_address)
+        except Exception as e:
+            ai_analysis = f"Analysis temporarily pending. Error: {str(e)}"
+            remediation = "Pending"
+    else:
+        ai_analysis = "Routine operational event. No active AI analysis required."
+        remediation = "None"
+        
+    attack_prob = "100%" if risk_level in ["Critical", "High"] else "0%"
     phase = "Delivery"
     
     insert_log(source, ip_address, country, details, event_type, risk_level, risk, mitre, ai_analysis, remediation, attack_prob, phase)
-    print(f"[{risk_level}] Ingested Fortinet Threat from {ip_address}: {event_type}")
+    print(f"[{risk_level}] Ingested Fortinet Event from {ip_address}: {event_type}")
+    return True
 
 class SyslogUDPHandler(socketserver.BaseRequestHandler):
     def handle(self):
@@ -85,8 +92,8 @@ def import_historical_logs(file_path):
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
             if "srcip=" in line:
-                process_and_insert(line)
-                count += 1
+                if process_and_insert(line):
+                    count += 1
                 
     print(f"✅ Successfully processed {count} historical firewall logs.")
 
