@@ -1,0 +1,51 @@
+# Complete list of all available properties: https://docs.upsun.com/create-apps/app-reference/single-runtime-image.html
+applications:
+  # THE CLIENT SOC (Port 5001)
+  ccl-client:
+    source:
+      root: "/"
+    type: "python:3.12"
+    web:
+      commands:
+        start: "PORT=5001 python3 app.py"
+      locations:
+        "/":
+          passthru: true
+    mounts:
+      "soc_data":
+        source: "storage"
+        path: "data"
+    hooks:
+      build: |
+        set -eux
+        pip install -r requirements.txt
+
+  # THE DIRECTOR DASHBOARD (Port 5005)
+  ccl-director:
+    source:
+      root: "/"
+    type: "python:3.12"
+    web:
+      commands:
+        start: "PORT=5005 python3 parent_app.py"
+      locations:
+        "/":
+          passthru: true
+    mounts:
+      "parent_data":
+        source: "storage"
+        path: "data"
+    hooks:
+      build: |
+        set -eux
+        pip install -r requirements.txt
+
+# The routes of the project.
+routes:
+  "https://client.{default}/":
+    type: upstream
+    upstream: "ccl-client:http"
+
+  "https://director.{default}/":
+    type: upstream
+    upstream: "ccl-director:http"
