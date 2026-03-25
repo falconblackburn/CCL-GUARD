@@ -7,7 +7,7 @@ applications:
     type: "python:3.12"
     web:
       commands:
-        start: "PORT=5001 python3 app.py"
+        start: "python3 app.py"
       locations:
         "/":
           passthru: true
@@ -27,7 +27,7 @@ applications:
     type: "python:3.12"
     web:
       commands:
-        start: "PORT=5005 python3 parent_app.py"
+        start: "python3 parent_app.py"
       locations:
         "/":
           passthru: true
