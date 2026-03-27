@@ -1,196 +1,82 @@
-🛡 CyberSecurity AI SOC Platform
+# 🛡️ CCL Guard: Agentic AI SOC Platform
 
-An AI-powered Security Operations Center (SOC) simulation platform built using Python and Flask that detects cyber attacks in real time, visualizes threats, manages incidents, sends alerts, blocks malicious IPs, and generates professional incident response reports.
+**CCL Guard** is a production-grade, Agentic Artificial Intelligence Security Operations Center (SOC). It utilizes Local Large Language Models (LLMs) via Ollama and Google Gemini 2.5 to autonomously ingest telemetry, triage alerts, conduct forensic investigations, and execute containment actions in real-time.
 
-This project demonstrates a complete Blue Team workflow:
+This repository transforms traditional manual security monitoring into a fully automated, multi-tenant Blue Team AI workflow.
 
-Detection → Analysis → Response → Reporting
+---
 
-🚀 Features
-### 🌐 Deployment
-Hosted on Render
+## 🚀 Key Features
 
-Live URL: https://cybersecurity-ai-soc.onrender.com
+- **Agentic AI Investigation Loop:** Automatically executes a 3-stage multi-agent loop (Triage False Positives -> Deep Forensics -> Active Remediation) for every network alert.
+- **Agentless Telemetry Ingestion:** Natively integrates with existing infrastructure without endpoint agents:
+  - **Fortinet Firewalls:** Live UDP Syslog listener (Port 5140).
+  - **Splunk SIEM:** REST API background polling.
+  - **AWS / Azure / Cloudflare:** Automated log ingestion via API.
+- **Multi-Tenant Director Dashboard:** Managed Service Providers (MSPs) can monitor multiple isolated customer deployments from a single pane of glass (Port 5005).
+- **Automated Containment:** Proactively blocks malicious IP addresses on the host firewall (`netsh`, `iptables`) and isolates hosts.
+- **Zero-Config Remote Access:** Automatically provisions secure **Cloudflare Tunnels** (`.trycloudflare.com`) during deployment, requiring zero inbound firewall changes.
 
-### 🔐 Admin Access (Demo Only)
+---
 
-This project is deployed for demonstration purposes.
+## 💻 System Requirements
 
-Admin Panel:
-URL: https://cybersecurity-ai-soc.onrender.com
+Because this platform runs both a web backend and Agentic AI models, the host machine must meet the following specifications:
 
-Demo Credentials:
-Username: admin
-Password: admin123
+- **Operating System:** Ubuntu 22.04+ (Recommended) or Windows Server 2022
+- **Processor:** 4 vCPU cores (Minimum) / 8 vCPU cores (Recommended)
+- **Memory (RAM):** 
+  - **8GB RAM** (Minimum - Requires relying on the Gemini Cloud API for AI)
+  - **24GB RAM** (Recommended - Allows running local, air-gapped `Llama3`/`Mistral` models via Ollama)
+- **Storage:** 50GB SSD
+- **Dependencies:** Docker and Docker Compose
 
-⚠️ Note:
-These credentials are for demo/testing only.
-In production, authentication is protected via environment variables and secure hashing.
+---
 
-API Access:
-The `/predict` endpoint is publicly exposed for attack simulation via the attack_generator.py script.
+## 🛠️ Customer Deployment Instructions (Step-by-Step)
 
-No sensitive production data is stored.
+Customers can deploy this application securely on their own infrastructure in less than 5 minutes using our interactive Docker setup wizard.
 
+### 1. Download the Application
+SSH into the deployment server (Linux VPS or Bare Metal) and clone the repository:
+```bash
+git clone https://github.com/falconblackburn/CCL-GUARD.git
+cd CCL-GUARD
+```
 
-🔍 Attack Detection
+### 2. Run the Interactive Installer
+Execute the automated setup script. This will build the Docker containers, configure environment variables, and map the persistent databases.
+```bash
+chmod +x setup_docker.sh
+./setup_docker.sh
+```
 
-Simulated cyber attacks (DDoS, BruteForce, SQL Injection, PortScan)
+### 3. Follow Wizard Prompts
+The wizard will ask you for:
+- **Client Name** (For the MSP Director portal)
+- **App Port** (Default: `5001`)
+- **API Keys** (Optional: Gemini API Key for backup AI, Twilio for mobile alerts)
 
-AI classification logic
+### 4. Access the Dashboard
+Once the installation finishes, the SOC is officially live! The script will automatically output a securely generated **Cloudflare Tunnel URL** (e.g., `https://random-words.trycloudflare.com`). 
 
-Severity + Risk scoring
+You can immediately visit this URL in your web browser to view the SOC dashboard from anywhere in the world. (Default login is typically `admin` / `admin123`).
 
-MITRE ATT&CK mapping
+---
 
-📊 SOC Dashboard
+## 🧱 Architecture Flow
 
-Live attack table
+1. **Ingestion Layer:** Data flows in via Syslog (UDP 5140), Splunk Polling, or the local Endpoint Agent webhook.
+2. **Detection Engine:** ML-driven classification assesses the Risk and MITRE ATT&CK phase.
+3. **Agentic AI Orchestrator:** 
+   - Attempts local Ollama LLM execution.
+   - Falls back to Gemini 2.5 API if local models are unavailable.
+4. **Remediation Layer:** Approves automatic host isolation or IP blocking.
+5. **Director Sync:** The heartbeat mechanism pushes tenant telemetry to the centralized MSP Director application.
 
-Threat timeline graph
+---
 
-Geo attack visualization
+## 👨‍💻 Contributing & Support
+For advanced deployment modes (Windows PowerShell install, Render PaaS, or Upsun), please refer to the specific deployment guides located in the project root (e.g., `CUSTOMER_DEPLOYMENT_HANDBOOK.md`, `UPSUN_DEPLOYMENT_GUIDE.md`).
 
-Kill-chain phase tracking
-
-Top attackers & attack distribution
-
-🚨 Automated Response
-
-Email alerts for high severity attacks
-
-Automatic Windows Firewall IP blocking
-
-Incident creation for critical threats
-
-🗂 Incident Management
-
-Admin / Analyst login
-
-Close incidents
-
-Analyst comments
-
-Audit logging
-
-📄 Professional SOC Reports
-
-PDF Incident Response Report
-
-Executive summary
-
-Severity pie chart
-
-Attack bar chart
-
-Critical incident insights
-
-Recommended actions
-
-Generated using ReportLab + Matplotlib.
-
-🧱 Architecture Flow
-Attack Generator
-        ↓
-Flask API (/predict)
-        ↓
-Attack Classification
-        ↓
-Severity + Risk + MITRE
-        ↓
-SQLite Database
-        ↓
-SOC Dashboard
-        ↓
-Email Alert + Firewall Block
-        ↓
-Incident Management + PDF Report
-
-▶ How To Run
-1️⃣ Clone Repository
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
-cd YOUR_REPO
-
-2️⃣ Create Virtual Environment
-python -m venv venv
-venv\Scripts\activate
-
-3️⃣ Install Requirements
-pip install -r requirements.txt
-
-4️⃣ Run Backend
-python app.py
-
-
-Open browser:
-
-http://127.0.0.1:5000
-
-🔐 Login
-
-Create users manually in SQLite.
-
-Admin role required to close incidents.
-
-📄 Generate SOC Report
-
-Open:
-
-/report
-
-
-PDF downloads to:
-
-reports/SOC_Report.pdf
-
-📂 Project Structure
-Backend/
- ├── app.py
- ├── database.py
- ├── soc.db
- ├── reports/
- ├── templates/
- └── static/
-
-🎯 Use Cases
-
-SOC simulation
-
-Cybersecurity learning
-
-Hackathon demo
-
-Resume project
-
-Blue Team practice
-
-👨‍💻 Author
-
-Harshith Tadikonda
-
-⚠ Disclaimer
-
-Educational project only.
-Do NOT deploy to production.
-
-⭐ If you like this project, give it a star!
-
-## 📸 Screenshots
-
-### SOC Dashboard
-![Dashboard](screenshots/dashboard.png)
-
-### Incident Management
-![Incidents](screenshots/incidents.png)
-
-### AI SOC Report
-![Report](screenshots/report.png)
-
-
-🧠 Resume Bullet
-
-Built an AI-powered SOC platform using Python & Flask featuring real-time attack detection, MITRE mapping, automated firewall blocking, incident management, and executive PDF reporting.
-
-🔥 GitHub Description
-
-AI-powered Security Operations Center platform with real-time attack detection, automated response, incident management, and professional SOC reporting.
+*© 2026 CCL Guard Cyber Defense | Agentic Security Solutions*
