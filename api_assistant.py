@@ -1,13 +1,10 @@
 import os
 import sqlite3
 from flask import jsonify, request
-# DB path logic
 
-# Dynamically determine the DB path based on the OS
-if os.name == 'nt':
-    DB_NAME = os.path.join(os.environ.get('TEMP', 'C:\\temp'), "soc.db")
-else:
-    DB_NAME = "/tmp/soc.db"
+# DB path - must match database.py exactly
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_NAME = os.environ.get("DB_PATH", os.path.join(_BASE_DIR, "soc.db"))
 
 def handle_assistant_query():
     """Handle natural language queries using Gemini."""
@@ -22,6 +19,12 @@ def handle_assistant_query():
         con = sqlite3.connect(DB_NAME)
         c = con.cursor()
         
+        # Ensure tables exist (safety check for production)
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='logs'")
+        if not c.fetchone():
+            con.close()
+            return jsonify({"response": "I'm still initializing the security database. Please wait a moment while I sync the latest logs."})
+
         # Summary of last 24 hours of logs
         c.execute("SELECT attack, severity, COUNT(*) FROM logs WHERE time >= datetime('now', '-1 day') GROUP BY attack, severity")
         summary = c.fetchall()
@@ -61,7 +64,7 @@ def handle_assistant_query():
 
         import google.generativeai as genai
         genai.configure(api_key=gemini_api_key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content(assistant_prompt)
         return jsonify({"response": response.text})
 

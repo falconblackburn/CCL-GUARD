@@ -2,8 +2,8 @@ import socketserver
 import argparse
 import os
 import re
-from database import insert_log, init_db
-from app import AIAnalysisEngine
+from database import insert_log, init_db, create_incident
+from app import AIAnalysisEngine, attack_phase
 
 # Map Fortinet severity levels to CCL Guard Risk Levels
 SEVERITY_MAP = {
@@ -66,6 +66,11 @@ def process_and_insert(log_line):
     phase = "Delivery"
     
     insert_log(source, ip_address, country, details, event_type, risk_level, risk, mitre, ai_analysis, remediation, attack_prob, phase)
+    
+    # NEW: Create incident for dashboard visibility
+    if risk_level in ["Critical", "High"]:
+        create_incident(event_type, risk_level, risk, phase, ai_analysis[:100], remediation, source)
+        
     print(f"[{risk_level}] Ingested Fortinet Event from {ip_address}: {event_type}")
     return True
 

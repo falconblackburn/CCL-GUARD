@@ -64,19 +64,29 @@ if ($Choice -eq "y") {
     $CurrentDir = Get-Location
     $PythonPath = "$CurrentDir\.venv\Scripts\python.exe"
     
-    # Task 1: Main Platform
+    # Task 1: Main Platform (Port 5001)
     Write-Host "[*] Creating background task for CCL Guard App..."
     schtasks /create /tn "CCL_Guard_App" /tr "$PythonPath $CurrentDir\app.py" /sc onstart /ru SYSTEM /rl HIGHEST /f
     
-    # Task 2: Monitoring Agent
+    # Task 2: Director Dashboard (Port 5005)
+    Write-Host "[*] Creating background task for CCL Guard Director..."
+    schtasks /create /tn "CCL_Guard_Director" /tr "$PythonPath $CurrentDir\parent_app.py" /sc onstart /ru SYSTEM /rl HIGHEST /f
+
+    # Task 3: Fortinet Syslog Receiver (UDP 5140)
+    Write-Host "[*] Creating background task for Fortinet Sync..."
+    schtasks /create /tn "CCL_Guard_Fortinet" /tr "$PythonPath $CurrentDir\fortinet_sync.py --live" /sc onstart /ru SYSTEM /rl HIGHEST /f
+    
+    # Task 4: Monitoring Agent
     Write-Host "[*] Creating background task for CCL Guard Agent..."
     schtasks /create /tn "CCL_Guard_Agent" /tr "$PythonPath $CurrentDir\lightweight_agent.py" /sc onstart /ru SYSTEM /rl HIGHEST /f
     
-    # Task 3: Firewall Access
-    Write-Host "[*] Opening Firewall Port 5001 for remote access..."
+    # Firewall Rules
+    Write-Host "[*] Configuring Windows Firewall..."
     New-NetFirewallRule -DisplayName "CCL Guard SOC" -Direction Inbound -LocalPort 5001 -Protocol TCP -Action Allow -ErrorAction SilentlyContinue
+    New-NetFirewallRule -DisplayName "CCL Guard Director" -Direction Inbound -LocalPort 5005 -Protocol TCP -Action Allow -ErrorAction SilentlyContinue
+    New-NetFirewallRule -DisplayName "CCL Guard Syslog" -Direction Inbound -LocalPort 5140 -Protocol UDP -Action Allow -ErrorAction SilentlyContinue
 
-    Write-Host "[+] CCL Guard will now start automatically when the server boots!" -ForegroundColor Green
+    Write-Host "[+] All CCL Guard services will now start automatically when the server boots!" -ForegroundColor Green
 }
 
 Write-Host "`n[SUCCESS] Setup Complete!" -ForegroundColor Green

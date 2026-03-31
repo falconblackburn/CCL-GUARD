@@ -1,0 +1,24 @@
+*   Trying 127.0.0.1:5001...
+* Connected to 127.0.0.1 (127.0.0.1) port 5001
+> GET /api/generate_report HTTP/1.1
+> Host: 127.0.0.1:5001
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/1.1 302 FOUND
+< Server: Werkzeug/3.1.6 Python/3.14.2
+< Date: Fri, 27 Mar 2026 10:51:31 GMT
+< Content-Type: text/html; charset=utf-8
+< Content-Length: 199
+< Location: /login
+< Vary: Cookie
+< Connection: close
+< 
+{ [199 bytes data]
+* Closing connection
+<!doctype html>
+<html lang=en>
+<title>Redirecting...</title>
+<h1>Redirecting...</h1>
+<p>You should be redirected automatically to the target URL: <a href="/login">/login</a>. If not, click the link.

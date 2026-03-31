@@ -374,13 +374,17 @@
             const container = document.getElementById('analysis-container');
             container.innerHTML = '<div style="text-align: center; padding: 2rem;"><p>AI is processing security layers...</p></div>';
 
-            fetch('/api/history')
+            fetch(`/api/log/${logId}`)
                 .then(r => r.json())
-                .then(logs => {
-                    const log = logs.find(l => l[0] == logId);
-                    if (log) {
+                .then(log => {
+                    if (log && !log.error) {
                         renderAnalysis(log);
+                    } else {
+                        container.innerHTML = '<div style="text-align: center; padding: 2rem;"><p>Error: Log not found or AI analysis failed.</p></div>';
                     }
+                })
+                .catch(err => {
+                    container.innerHTML = '<div style="text-align: center; padding: 2rem;"><p>Network error: Could not reach AI engine.</p></div>';
                 });
         }
 

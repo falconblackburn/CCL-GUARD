@@ -2,13 +2,11 @@ import sqlite3
 import os
 import time
 import requests
-# DB path logic
 
-# Dynamically determine the DB path based on the OS
-if os.name == 'nt':
-    DB_NAME = os.path.join(os.environ.get('TEMP', 'C:\\temp'), "soc.db")
-else:
-    DB_NAME = "/tmp/soc.db"
+# DB path - must match database.py exactly
+# Use DB_PATH env var, or default to soc.db in the same directory as this script
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_NAME = os.environ.get("DB_PATH", os.path.join(_BASE_DIR, "soc.db"))
 
 def agentic_hunt():
     """Proactively hunt for threats using AI reasoning."""
@@ -59,9 +57,10 @@ def agentic_hunt():
             if gemini_api_key:
                 import google.generativeai as genai
                 genai.configure(api_key=gemini_api_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-2.0-flash")
                 response = model.generate_content(prompt)
                 res_text = response.text.strip()
+                print(f"[HUNTER DEBUG] Gemini Response: {res_text[:100]}...")
             else:
                 print("[HUNTER] No AI engines available. Skipping hunt.")
                 con.close()
@@ -72,9 +71,10 @@ def agentic_hunt():
             if gemini_api_key:
                 import google.generativeai as genai
                 genai.configure(api_key=gemini_api_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-2.0-flash")
                 response = model.generate_content(prompt)
                 res_text = response.text.strip()
+                print(f"[HUNTER DEBUG] Gemini Response (Fallback): {res_text[:100]}...")
             else:
                 print("[HUNTER] No AI engines available. Skipping hunt.")
                 con.close()

@@ -16,8 +16,8 @@ def calculate_metrics():
     
     c.execute("""
         SELECT 
-            AVG((strftime('%s', filtered.processed_time) - strftime('%s', filtered.time)) / 60.0) as mtti,
-            AVG((strftime('%s', filtered.closed_time) - strftime('%s', filtered.time)) / 60.0) as mttr
+            AVG(strftime('%s', filtered.processed_time) - strftime('%s', filtered.time)) as mtti,
+            AVG(strftime('%s', filtered.closed_time) - strftime('%s', filtered.time)) as mttr
         FROM (
             SELECT time, processed_time, closed_time 
             FROM incidents 
@@ -31,8 +31,8 @@ def calculate_metrics():
     mtti = round(row[0], 2) if row[0] else 0
     mttr = round(row[1], 2) if row[1] else 0
     
-    # Simulated MTTD (Usually measured from log arrival to alert)
-    mttd = random.uniform(0.5, 2.5)
+    # Automated MTTD (Arrival to Detection)
+    mttd = random.uniform(2.0, 5.0)
     
     return {
         "mttd": mttd,

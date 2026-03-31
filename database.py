@@ -3,7 +3,8 @@ import datetime
 import os
 import json
 
-DB_NAME = os.environ.get("DB_PATH", "soc.db")
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_NAME = os.environ.get("DB_PATH", os.path.join(_BASE_DIR, "soc.db"))
 
 # ---------------- INIT DATABASE ----------------
 
@@ -114,6 +115,13 @@ def init_db():
         time TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
+    # Performance Indexes for High Volume (2M+ records)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_logs_ip ON logs(ip)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_logs_severity ON logs(severity)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(time)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_incidents_severity ON incidents(severity)")
 
     conn.commit()
     conn.close()
