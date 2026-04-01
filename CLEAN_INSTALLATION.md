@@ -7,26 +7,39 @@ Ensure the server (Windows or Linux) has **Python 3.10+** and **Git** installed.
 
 ## 2. Deep Clean (Optional)
 If you are reusing a previously deployed server and want to remove ALL old logs, incidents, and data, run the cleanup utility:
+
+**Windows (PowerShell):**
 ```powershell
 .\master_cleanup.ps1
+```
+
+**Linux (Bash):**
+```bash
+chmod +x master_cleanup.sh
+./master_cleanup.sh
 ```
 *This will terminate background services, delete `soc.db`, and purge diagnostic logs.*
 
 ## 3. Clone & Setup
-Open PowerShell (as Administrator) or Terminal and run:
+Open your terminal (as Administrator/Root) and run:
 ```bash
 git clone https://github.com/falconblackburn/CCL-GUARD.git
 cd CCL-GUARD
 ```
 
-### Windows (Automated)
-Run the master setup script:
+### Windows (Automated Wizard)
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 .\setup_windows.ps1
 ```
+
+### Linux (Automated Wizard)
+```bash
+chmod +x setup_linux.sh
+./setup_linux.sh
+```
 > [!TIP]
-> When asked to install background services, select **'y'** to ensure the Main App, Director Dashboard, and Fortinet Sync start automatically on boot.
+> Both wizards will ask to install background services. Select **'y'** to ensure the Main App (5001), Director (5005), and Fortinet Sync (5140) start automatically on boot.
 
 ### Linux (Manual)
 ```bash
