@@ -2,13 +2,12 @@ import sqlite3
 import datetime
 import os
 import json
+import time
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_NAME = os.environ.get("DB_PATH", os.path.join(_BASE_DIR, "soc.db"))
 
 # ---------------- INIT DATABASE ----------------
-
-import time
 
 def connect_with_retry(timeout=10):
     """Retries connection if database is locked."""
@@ -42,23 +41,23 @@ def init_db():
     c.execute("""
     CREATE TABLE IF NOT EXISTS logs(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        source TEXT, -- SIEM, AWS, Windows, etc.
+        source TEXT,
         ip TEXT,
         country TEXT,
-        raw_data TEXT, -- Full original log entry
+        raw_data TEXT,
         attack TEXT,
         severity TEXT,
         risk INTEGER,
         mitre TEXT,
-        ai_analysis TEXT, -- Deep AI analysis result
-        remediation TEXT, -- Step-by-step remediation plan
+        ai_analysis TEXT,
+        remediation TEXT,
         attack_prob INTEGER,
         phase TEXT,
         time TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
-    # INCIDENTS (Enhanced for V2)
+    # INCIDENTS
     c.execute("""
     CREATE TABLE IF NOT EXISTS incidents(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,21 +66,21 @@ def init_db():
         risk INTEGER,
         phase TEXT,
         status TEXT DEFAULT 'Open',
-        source TEXT, -- Source of the incident (e.g. Cloudflare, AWS)
+        source TEXT,
         analyst TEXT,
         comment TEXT,
-        ai_summary TEXT, -- Concise AI summary
-        remediation_steps TEXT, -- Remediation steps for the incident
-        approved_action INTEGER DEFAULT 0, -- 0: Pending, 1: Approved, -1: Rejected
-        feedback TEXT, -- Analyst feedback/corrections
-        report_path TEXT, -- Path to forensic report
+        ai_summary TEXT,
+        remediation_steps TEXT,
+        approved_action INTEGER DEFAULT 0,
+        feedback TEXT,
+        report_path TEXT,
         time TEXT,
-        processed_time TEXT, -- Time investigation started (for MTTI)
+        processed_time TEXT,
         closed_time TEXT
     )
     """)
 
-    # ANALYST FEEDBACK LOOP (Learning)
+    # FEEDBACK
     c.execute("""
     CREATE TABLE IF NOT EXISTS feedback_logs(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,7 +91,6 @@ def init_db():
         time TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """)
-
 
     # THREAT FEEDS
     c.execute("""
@@ -128,39 +126,52 @@ def init_db():
     conn.commit()
     conn.close()
 
-
-
 # ---------------- INSERT LOG ----------------
 
 def insert_log(source, ip, country, raw_data, attack, severity, risk, mitre, ai_analysis, remediation, attack_prob, phase):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-
     cursor.execute("""
     INSERT INTO logs(
         source, ip, country, raw_data, attack, severity, risk, mitre, ai_analysis, remediation, attack_prob, phase
     )
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
     """, (source, ip, country, raw_data, attack, severity, risk, mitre, ai_analysis, remediation, attack_prob, phase))
-
     conn.commit()
     conn.close()
 
+def insert_logs_batch(logs_list):
+    """Inserts multiple logs in a single transaction for massive performance gain."""
+    if not logs_list:
+        return
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("BEGIN")
+        cursor.executemany("""
+        INSERT INTO logs(
+            source, ip, country, raw_data, attack, severity, risk, mitre, ai_analysis, remediation, attack_prob, phase
+        )
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+        """, logs_list)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"[DB ERROR] Batch insert failed: {e}")
+    finally:
+        conn.close()
 
 # ---------------- CREATE INCIDENT ----------------
 
 def create_incident(attack, severity, risk, phase, ai_summary, remediation_steps, source="Unknown"):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-
     c.execute("""
     INSERT INTO incidents(attack, severity, risk, phase, status, ai_summary, remediation_steps, source, time, processed_time)
     VALUES(?,?,?,?, 'Open', ?, ?, ?, datetime('now'), NULL)
     """, (attack, severity, risk, phase, ai_summary, remediation_steps, source))
-
     conn.commit()
     conn.close()
-
     try:
         from notifications import send_incident_alert
         send_incident_alert(attack, severity, source, ai_summary)
@@ -168,7 +179,6 @@ def create_incident(attack, severity, risk, phase, ai_summary, remediation_steps
         print(f"[DB ERROR] Failed to trigger notification: {e}")
 
 def mark_incident_processed(incident_id):
-    """Marks the start of investigation."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("UPDATE incidents SET processed_time=datetime('now') WHERE id=? AND processed_time IS NULL", (incident_id,))
@@ -176,7 +186,6 @@ def mark_incident_processed(incident_id):
     conn.close()
 
 def close_incident(incident_id, analyst_name, feedback):
-    """Closes the incident and sets final timestamps."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("""
@@ -188,7 +197,6 @@ def close_incident(incident_id, analyst_name, feedback):
     conn.close()
 
 def get_incident_stats():
-    """Returns optimized counts for the dashboard badges."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("""
@@ -206,9 +214,6 @@ def get_incident_stats():
         "critical": res[2] or 0
     }
 
-
-
-
 # ---------------- THREAT FEEDS ----------------
 
 def insert_threat_intel(source, indicator, intel_type, description):
@@ -218,7 +223,6 @@ def insert_threat_intel(source, indicator, intel_type, description):
               (source, indicator, intel_type, description))
     conn.commit()
     conn.close()
-
 
 # ---------------- FETCHING ----------------
 
@@ -237,7 +241,6 @@ def fetch_incidents(limit=100, offset=0):
     rows = c.fetchall()
     conn.close()
     return rows
-
 
 def fetch_threat_feeds():
     conn = sqlite3.connect(DB_NAME)

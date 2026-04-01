@@ -1160,6 +1160,35 @@ if __name__ == "__main__":
                 print(f"[SOC] Background Threat Intel Error: {e}")
             time.sleep(3600) # Fetch every 1 hour
 
+    def remediation_worker():
+        """Processes 'Pending AI' logs from high-volume Fortinet ingestion."""
+        while True:
+            try:
+                con = connect_with_retry()
+                c = con.cursor()
+                c.execute("SELECT id, attack, severity, source, ip FROM logs WHERE ai_analysis LIKE '%Pending AI%' LIMIT 5")
+                pending = c.fetchall()
+                con.close()
+                
+                if not pending:
+                    time.sleep(30)
+                    continue
+                    
+                for lid, attack, severity, source, ip in pending:
+                    print(f"[*] Async AI Analysis for Log {lid} ({attack})...")
+                    analysis, remediation = AIAnalysisEngine.analyze(attack, severity, source, ip)
+                    
+                    con = connect_with_retry()
+                    c = con.cursor()
+                    c.execute("UPDATE logs SET ai_analysis=?, remediation=? WHERE id=?", (analysis, remediation, lid))
+                    con.commit()
+                    con.close()
+                    time.sleep(5) # Avoid API rate limits
+                
+            except Exception as e:
+                print(f"[SOC] Remediation Worker Error: {e}")
+            time.sleep(10)
+
     def hunter_worker():
         """Background thread for Agentic Hunter."""
         while True:
@@ -1220,6 +1249,7 @@ if __name__ == "__main__":
     print("[SOC] Starting background threads...")
     threading.Thread(target=threat_intel_worker, daemon=True).start()
     threading.Thread(target=hunter_worker, daemon=True).start()
+    threading.Thread(target=remediation_worker, daemon=True).start()
     threading.Thread(target=cloudflare_worker, daemon=True).start()
     threading.Thread(target=parent_heartbeat_worker, daemon=True).start()
     threading.Thread(target=aws_worker, daemon=True).start()
