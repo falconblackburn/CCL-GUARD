@@ -33,7 +33,8 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT,
         password TEXT,
-        role TEXT
+        role TEXT,
+        is_first_login INTEGER DEFAULT 1
     )
     """)
 

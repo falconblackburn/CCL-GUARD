@@ -10,13 +10,70 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif !important;
+        body { font-family: 'Inter', sans-serif !important; }
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(10px);
+            display: flex; align-items: center; justify-content: center; z-index: 9999;
         }
+        .onboarding-card {
+            background: var(--bg-card); border: 1px solid var(--accent-blue);
+            padding: 3rem; border-radius: 1.5rem; text-align: center; max-width: 600px;
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .logo-large { font-weight: 700; font-size: 2rem; color: var(--accent-blue); letter-spacing: 0.2rem; margin-bottom: 2rem; }
+        .welcome-title { font-size: 2.5rem; margin-bottom: 1.5rem; background: linear-gradient(to right, #fff, #94a3b8); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        .welcome-text { color: var(--text-secondary); line-height: 1.8; margin-bottom: 2rem; }
+        .onboarding-features { display: flex; justify-content: center; gap: 2rem; margin-bottom: 3rem; color: var(--text-primary); }
+        .feature-item { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+        .btn-primary { background: var(--accent-blue); color: white; border: none; padding: 1rem 2.5rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(56, 189, 248, 0.3); }
+        .tour-tooltip {
+            position: fixed; background: var(--bg-card); border: 2px solid var(--accent-blue);
+            padding: 1.5rem; border-radius: 1rem; width: 300px; z-index: 10000;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        .tour-nav { display: flex; justify-content: space-between; margin-top: 1rem; }
+        .highlight-tour { position: relative; z-index: 10001; box-shadow: 0 0 0 9999px rgba(0,0,0,0.7), 0 0 20px var(--accent-blue) !important; border-radius: 0.5rem; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 
 <body>
+    {% if show_onboarding %}
+    <div id="onboarding-overlay" class="modal-overlay">
+        <div class="onboarding-card">
+            <div class="logo-large">CCL GUARD</div>
+            <h1 class="welcome-title">Welcome to the Frontline.</h1>
+            <p class="welcome-text">
+                Your intelligence-driven cyber defense platform is now active. We’ve initialized a clean, high-performance environment fortified with real-time AI remediation. 
+            </p>
+            <div class="onboarding-features">
+                <div class="feature-item">
+                    <i data-lucide="shield-check"></i>
+                    <span>Autonomous Threat Triage</span>
+                </div>
+                <div class="feature-item">
+                    <i data-lucide="zap"></i>
+                    <span>Sub-second Detection</span>
+                </div>
+                <div class="feature-item">
+                    <i data-lucide="cpu"></i>
+                    <span>Agentic AI Reasoning</span>
+                </div>
+            </div>
+            <button class="btn-primary" onclick="startTour()">Begin Executive Tour</button>
+            <button class="btn-link" onclick="dismissOnboarding()" style="margin-top: 1rem; color: var(--text-secondary);">Skip for now</button>
+        </div>
+    </div>
+    <div id="tour-tooltip" class="tour-tooltip" style="display: none;">
+        <div id="tour-content"></div>
+        <div class="tour-nav">
+            <button id="tour-next" class="btn-primary btn-sm">Next Step</button>
+            <button onclick="dismissOnboarding()" class="btn-link btn-sm">End Tour</button>
+        </div>
+    </div>
+    {% endif %}
     <div class="container">
         <header>
             <div class="logo-wrapper">
@@ -231,7 +288,59 @@
     </div>
 
     <script>
+        // --- ONBOARDING ENGINE ---
+        let tourStep = 0;
+        const steps = [
+            { el: '.dashboard-grid', title: "Strategic Overview", text: "Real-time metrics tracking your global posture and critical remediation needs." },
+            { el: '.card-body.scrollable', title: "Live Intelligence", text: "Streaming ingestion from your firewalls. Click 'Analyze' for AI deep-dives." },
+            { el: '#assistant-widget', title: "AI Decision Support", text: "Your personal security agent. Ask questions or request tactical advice anytime." },
+            { el: 'nav', title: "Operations Hub", text: "Pivot to Incidents or Executive Reporting with a single click." }
+        ];
+
+        function startTour() {
+            const overlay = document.getElementById('onboarding-overlay');
+            if (overlay) overlay.style.display = 'none';
+            showStep();
+        }
+
+        function showStep() {
+            const step = steps[tourStep];
+            const target = document.querySelector(step.el);
+            const tooltip = document.getElementById('tour-tooltip');
+            
+            document.querySelectorAll('.highlight-tour').forEach(el => el.classList.remove('highlight-tour'));
+            
+            if (target && tooltip) {
+                target.classList.add('highlight-tour');
+                const rect = target.getBoundingClientRect();
+                tooltip.style.display = 'block';
+                tooltip.style.top = (window.scrollY + rect.bottom + 20) + 'px';
+                tooltip.style.left = (window.scrollX + rect.left) + 'px';
+                document.getElementById('tour-content').innerHTML = `<h3>${step.title}</h3><p style="font-size:0.9rem; color:var(--text-secondary); margin-top:0.5rem">${step.text}</p>`;
+            }
+
+            document.getElementById('tour-next').onclick = () => {
+                tourStep++;
+                if (tourStep < steps.length) {
+                    showStep();
+                } else {
+                    dismissOnboarding();
+                }
+            };
+        }
+
+        async function dismissOnboarding() {
+            const overlay = document.getElementById('onboarding-overlay');
+            const tooltip = document.getElementById('tour-tooltip');
+            if (overlay) overlay.style.display = 'none';
+            if (tooltip) tooltip.style.display = 'none';
+            document.querySelectorAll('.highlight-tour').forEach(el => el.classList.remove('highlight-tour'));
+            
+            await fetch('/api/complete_onboarding', { method: 'POST' });
+        }
+
         // --- THEME ENGINE ---
+
         const themeToggle = document.getElementById('theme-toggle');
         const themeIcon = document.getElementById('theme-icon');
         const themeText = document.getElementById('theme-text');

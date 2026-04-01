@@ -403,25 +403,13 @@ init_db()
 def create_default_user():
     con = sqlite3.connect(DB_NAME)
     c = con.cursor()
-
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS users(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT,
-        password TEXT,
-        role TEXT
-    )
-    """)
-
     from werkzeug.security import generate_password_hash
-
     c.execute("SELECT * FROM users")
     if not c.fetchone():
         c.execute("""
-        INSERT INTO users(username,password,role)
-        VALUES(?,?,?)
+        INSERT INTO users(username,password,role,is_first_login)
+        VALUES(?,?,?,1)
         """,("admin",generate_password_hash("admin123"),"admin"))
-
     con.commit()
     con.close()
 
@@ -538,20 +526,28 @@ def dashboard():
 
     try:
         print(f"DEBUG: Data fetch complete. unique_countries={unique_countries}")
-        return render_template("dashboard.html",
-                               logs=logs,
-                               incidents=incidents,
-                               threat_feeds=threat_feeds,
-                               role=role,
-                               total_attacks=total_attacks,
-                               open_incidents_count=open_incidents_count,
-                               critical_incidents=critical_incidents,
-                               threat_level=threat_level,
-                               threat_color=threat_color,
-                               unique_sources=unique_sources,
-                               unique_countries=unique_countries,
-                               top_ips=top_ips,
-                               metrics=metrics)
+        # Windowing for high-volume logs (Dashboard only scans last 100k for performance)
+        window = 100000
+        min_id = max(0, (total_attacks or 0) - window)
+        
+        # Check if this is the first login to show onboarding
+        show_onboarding = session.get("is_first_login", 0)
+
+        return render_template("dashboard.html", 
+                             logs=logs, 
+                             incidents=incidents,
+                             threat_feeds=threat_feeds,
+                             role=role,
+                             total_attacks=total_attacks,
+                             unique_sources=unique_sources,
+                             unique_countries=unique_countries,
+                             threat_level=threat_level,
+                             threat_color=threat_color,
+                             open_incidents_count=open_incidents_count,
+                             critical_incidents=critical_incidents,
+                             top_ips=top_ips,
+                             metrics=metrics,
+                             show_onboarding=show_onboarding)
     except Exception as e:
         print(f"🔥 [SOC DASHBOARD RENDER ERROR] {e}")
         import traceback
@@ -866,6 +862,20 @@ def whatsapp_webhook():
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "ccl-guard-default-secret-key-12345")
 
 
+@app.route("/api/complete_onboarding", methods=["POST"])
+def api_complete_onboarding():
+    if "user" not in session: return jsonify({"error": "Unauthorized"}), 401
+    
+    con = sqlite3.connect(DB_NAME)
+    c = con.cursor()
+    c.execute("UPDATE users SET is_first_login = 0 WHERE username = ?", (session["user"],))
+    con.commit()
+    con.close()
+    
+    session["is_first_login"] = 0
+    return jsonify({"status": "success"})
+
+
 @app.route("/login", methods=["GET","POST"])
 def login():
 
@@ -879,14 +889,14 @@ def login():
 
         c = con.cursor()
 
-        c.execute("SELECT password, role FROM users WHERE username=?", (u,))
+        c.execute("SELECT password, role, is_first_login FROM users WHERE username=?", (u,))
         r = c.fetchone()
-
         con.close()
 
         if r and check_password_hash(r[0], p):
             session["user"] = u
             session["role"] = r[1]
+            session["is_first_login"] = r[2]
             return redirect("/")
         else:
             return "Invalid login"
