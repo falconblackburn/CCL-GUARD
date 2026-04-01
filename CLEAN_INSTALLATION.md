@@ -5,7 +5,14 @@ Follow these steps to deploy a clean, production-ready instance of the AI SOC pl
 ## 1. Environment Preparation
 Ensure the server (Windows or Linux) has **Python 3.10+** and **Git** installed.
 
-## 2. Clone & Setup
+## 2. Deep Clean (Optional)
+If you are reusing a previously deployed server and want to remove ALL old logs, incidents, and data, run the cleanup utility:
+```powershell
+.\master_cleanup.ps1
+```
+*This will terminate background services, delete `soc.db`, and purge diagnostic logs.*
+
+## 3. Clone & Setup
 Open PowerShell (as Administrator) or Terminal and run:
 ```bash
 git clone https://github.com/falconblackburn/CCL-GUARD.git
