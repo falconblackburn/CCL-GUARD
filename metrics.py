@@ -1,16 +1,22 @@
 import sqlite3
-import datetime
 import random
 from database import DB_NAME
 
+def format_time(seconds):
+    if not seconds: return "0s"
+    m = int(seconds // 60)
+    s = int(seconds % 60)
+    if m > 0:
+        return f"{m} min {s} sec"
+    return f"{s} sec"
+
 def calculate_metrics():
     """
-    Calculates MTTD, MTTI, and MTTR in minutes.
+    Calculates MTTD, MTTI, and MTTR.
     """
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     
-    # MTTD: Time from Log creation to Incident creation (Simulated as we don't have log timestamps always matching incident triggers)
     # MTTI: Time from Incident creation to 'processed_time'
     # MTTR: Time from Incident creation to 'closed_time'
     
@@ -29,14 +35,14 @@ def calculate_metrics():
     row = c.fetchone()
     conn.close()
     
-    mtti = round(row[0], 2) if row[0] else 0
-    mttr = round(row[1], 2) if row[1] else 0
+    mtti_sec = row[0] if row[0] else 0
+    mttr_sec = row[1] if row[1] else 0
     
-    # Automated MTTD (Arrival to Detection)
-    mttd = random.uniform(2.0, 5.0)
+    # Automated MTTD (Arrival to Detection) - Simulated in Seconds
+    mttd_sec = random.randint(120, 300) 
     
     return {
-        "mttd": mttd,
-        "mtti": mtti,
-        "mttr": mttr
+        "mttd": format_time(mttd_sec),
+        "mtti": format_time(mtti_sec),
+        "mttr": format_time(mttr_sec)
     }
