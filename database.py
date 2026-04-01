@@ -116,10 +116,12 @@ def init_db():
     )
     """)
 
-    # Performance Indexes for High Volume (2M+ records)
+    # Performance Indexes for High Volume (5M+ records)
     c.execute("CREATE INDEX IF NOT EXISTS idx_logs_ip ON logs(ip)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_logs_severity ON logs(severity)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(time)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_logs_country ON logs(country)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_logs_risk ON logs(risk)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_incidents_severity ON incidents(severity)")
 
@@ -185,6 +187,25 @@ def close_incident(incident_id, analyst_name, feedback):
     conn.commit()
     conn.close()
 
+def get_incident_stats():
+    """Returns optimized counts for the dashboard badges."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("""
+        SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN status='Open' THEN 1 ELSE 0 END) as open_count,
+            SUM(CASE WHEN status='Open' AND severity='Critical' THEN 1 ELSE 0 END) as critical_count
+        FROM incidents
+    """)
+    res = c.fetchone()
+    conn.close()
+    return {
+        "total": res[0] or 0,
+        "open": res[1] or 0,
+        "critical": res[2] or 0
+    }
+
 
 
 
@@ -201,18 +222,18 @@ def insert_threat_intel(source, indicator, intel_type, description):
 
 # ---------------- FETCHING ----------------
 
-def fetch_logs(limit=50):
+def fetch_logs(limit=50, offset=0):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM logs ORDER BY id DESC LIMIT ?", (limit,))
+    cursor.execute("SELECT * FROM logs ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset))
     rows = cursor.fetchall()
     conn.close()
     return rows
 
-def fetch_incidents():
+def fetch_incidents(limit=100, offset=0):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT * FROM incidents ORDER BY id DESC")
+    c.execute("SELECT * FROM incidents ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset))
     rows = c.fetchall()
     conn.close()
     return rows

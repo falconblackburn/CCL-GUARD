@@ -453,31 +453,68 @@ def dashboard():
     metrics = {"mttd": 0, "mtti": 0, "mttr": 0}
     role = session.get("role", "analyst")
 
-    from database import fetch_logs, fetch_incidents, fetch_threat_feeds, DB_NAME, connect_with_retry
+    from database import fetch_logs, fetch_incidents, fetch_threat_feeds, DB_NAME, connect_with_retry, get_incident_stats
     from metrics import calculate_metrics
 
     print(f"DEBUG: Dashboard route triggered for user: {session.get('user')}")
     try:
-        # Load core data
+        # 1. OPTIMIZED STATUS AGGREGATES (SQL-Side)
+        stats = get_incident_stats()
+        open_incidents_count = stats["open"]
+        critical_incidents = stats["critical"]
+        
+        # 2. LOAD RECENT SAMPLES (Paginated)
         logs = fetch_logs(limit=10)
-        incidents = fetch_incidents()
+        incidents = fetch_incidents(limit=10) # Dashboard only needs a few
         threat_feeds = fetch_threat_feeds()
         
-        # Connect for dynamic stats
+        # Connect for windowed heavy stats
         con = connect_with_retry()
         c = con.cursor()
         
-        # 1. Total Detected Attacks
-        c.execute("SELECT COUNT(*) FROM logs")
+        # 3. Total Detected Attacks (Scanning only ID index is fast)
+        c.execute("SELECT MAX(id) FROM logs")
         res = c.fetchone()
-        total_attacks = res[0] if res else 0
+        total_attacks = res[0] if res and res[0] else 0
         
-        # 2. Open Incidents & Critical Count
-        open_inc_list = [i for i in incidents if i[5] == "Open"]
-        open_incidents_count = len(open_inc_list)
-        critical_incidents = len([i for i in open_inc_list if i[2] == "Critical"])
+        # 4. DATA WINDOWING: Scan last 100,000 logs for heavy statistics
+        # This ensures O(1) performance regardless of total volume (e.g. 5M+)
+        window_size = 100000
+        min_id = max(0, total_attacks - window_size)
         
-        # 3. Global Threat Level Logic
+        # Active Monitoring Sources (Unique IPs in window)
+        c.execute("SELECT COUNT(DISTINCT ip) FROM logs WHERE id > ?", (min_id,))
+        res = c.fetchone()
+        unique_sources = res[0] if res else 0
+
+        # Unique Countries (in window)
+        c.execute("SELECT COUNT(DISTINCT country) FROM logs WHERE id > ?", (min_id,))
+        res = c.fetchone()
+        unique_countries = res[0] if res else 0
+
+        # 5. Top Offending IPs (Windowed for speed)
+        c.execute("""
+            SELECT ip, COUNT(*) as count 
+            FROM logs 
+            WHERE id > ? 
+            GROUP BY ip 
+            ORDER BY count DESC 
+            LIMIT 5
+        """, (min_id,))
+        top_ips_raw = c.fetchall()
+        for ip, count in top_ips_raw:
+            # Sub-fetch for specific IP is fast due to idx_logs_ip
+            c.execute("SELECT severity, COUNT(*) FROM logs WHERE ip = ? AND id > ? GROUP BY severity", (ip, min_id))
+            sev_counts = dict(c.fetchall())
+            top_ips.append({
+                "ip": ip,
+                "total": count,
+                "high": sev_counts.get("High", 0) + sev_counts.get("Critical", 0),
+                "medium": sev_counts.get("Medium", 0),
+                "low": sev_counts.get("Low", 0)
+            })
+
+        # 6. Global Threat Level Logic
         if critical_incidents > 3:
             threat_level = "CRITICAL"
             threat_color = "var(--danger)"
@@ -487,30 +524,6 @@ def dashboard():
         else:
             threat_level = "GUARDED"
             threat_color = "var(--success)"
-
-        # 4. Active Monitoring Sources (Unique IPs)
-        c.execute("SELECT COUNT(DISTINCT ip) FROM logs")
-        res = c.fetchone()
-        unique_sources = res[0] if res else 0
-
-        # 5. Top Offending IPs
-        c.execute("SELECT ip, COUNT(*) as count FROM logs GROUP BY ip ORDER BY count DESC LIMIT 5")
-        top_ips_raw = c.fetchall()
-        for ip, count in top_ips_raw:
-            c.execute("SELECT severity, COUNT(*) FROM logs WHERE ip = ? GROUP BY severity", (ip,))
-            sev_counts = dict(c.fetchall())
-            top_ips.append({
-                "ip": ip,
-                "total": count,
-                "high": sev_counts.get("High", 0) + sev_counts.get("Critical", 0),
-                "medium": sev_counts.get("Medium", 0),
-                "low": sev_counts.get("Low", 0)
-            })
-        
-        # 6. Unique Countries
-        c.execute("SELECT COUNT(DISTINCT country) FROM logs")
-        res = c.fetchone()
-        unique_countries = res[0] if res else 0
 
         # 7. Investigation Metrics (MTTR/MTTD/MTTI)
         metrics = calculate_metrics()
@@ -654,16 +667,9 @@ def incidents_view():
 # INCIDENT API (JSON)
 @app.route("/api/incidents")
 def api_incidents():
-
-    conn = sqlite3.connect(DB_NAME)
-
-    c = conn.cursor()
-
-    c.execute("SELECT * FROM incidents ORDER BY id DESC")
-    rows = c.fetchall()
-
-    conn.close()
-
+    from database import fetch_incidents
+    # Default to last 100 for performance; frontend can request more if needed
+    rows = fetch_incidents(limit=100)
     return jsonify(rows)
 
 
@@ -719,16 +725,9 @@ def history():
 
 @app.route("/api/history")
 def api_history():
-    import sqlite3
-
-    con = sqlite3.connect(DB_NAME)
-
-    cur = con.cursor()
-
-    cur.execute("SELECT * FROM logs ORDER BY id DESC LIMIT 500")
-    rows = cur.fetchall()
-
-    con.close()
+    from database import fetch_logs
+    # Default to last 100 for safety on high-volume 5M+ tables
+    rows = fetch_logs(limit=100)
     return jsonify(rows)
 
 @app.route("/api/log/<int:log_id>")

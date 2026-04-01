@@ -22,6 +22,7 @@ def calculate_metrics():
             SELECT time, processed_time, closed_time 
             FROM incidents 
             WHERE status='Closed' AND processed_time IS NOT NULL AND closed_time IS NOT NULL
+            ORDER BY id DESC LIMIT 1000
         ) as filtered
     """)
     
