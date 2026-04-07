@@ -12,3 +12,5 @@ azure-identity
 splunk-sdk
 Pillow
 gunicorn
+psycopg2-binary
+flask-cors

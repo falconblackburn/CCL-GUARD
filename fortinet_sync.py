@@ -4,7 +4,9 @@ import os
 import re
 import time
 import threading
-from database import insert_logs_batch, init_db, create_incident
+import requests
+import json
+from database import insert_logs_batch, init_db, create_incident, DB_NAME
 
 # Map Fortinet severity levels to CCL Guard Risk Levels
 SEVERITY_MAP = {
@@ -23,6 +25,9 @@ MAX_BUFFER_SIZE = 250
 FLUSH_INTERVAL = 5 # seconds
 log_buffer = []
 buffer_lock = threading.Lock()
+
+remote_url = None
+auth_key = None
 
 def parse_fortinet_syslog(log_line):
     parsed_data = {}
@@ -48,34 +53,27 @@ def process_log(log_line):
     event_type = f"Fortinet {parsed.get('subtype', parsed.get('type', 'Firewall Event')).title()}"
     details = parsed.get("msg", "No message provided by firewall")
     
-    source = "Fortinet"
-    country = "Unknown"
-    risk = "High" if risk_level in ["Critical", "High"] else ("Medium" if risk_level == "Medium" else "Low")
-    mitre = "T1190"
-    
-    # NON-BLOCKING AI: High volume logs must have AI performed asynchronously
-    if risk_level in ["Critical", "High"]:
-        ai_analysis = "Pending AI Analysis (High Volume Mode)"
-        remediation = "Pending"
-    else:
-        ai_analysis = "Routine operational event."
-        remediation = "None"
-        
-    attack_prob = "100%" if risk_level in ["Critical", "High"] else "0%"
-    from app import attack_phase # Delayed import to avoid circular dependency
-    phase = "Delivery"
-
+    # Standardized 12-tuple for batch insertion
     log_entry = (
-        source, ip_address, country, details, event_type, 
-        risk_level, risk, mitre, ai_analysis, remediation, 
-        attack_prob, phase
+        "Fortinet",
+        ip_address,
+        parsed.get("dstcountry", "Internal"),
+        log_line.strip(),
+        event_type,
+        risk_level,
+        80 if risk_level == "Critical" else 50,
+        "T1190",
+        details,
+        "Verify firewall policy and source IP reputation.",
+        90,
+        "Delivery"
     )
-    
+
     with buffer_lock:
         log_buffer.append(log_entry)
         if len(log_buffer) >= MAX_BUFFER_SIZE:
-            flush_buffer()
-            
+            threading.Thread(target=flush_buffer).start()
+    
     return True
 
 def flush_buffer():
@@ -83,19 +81,31 @@ def flush_buffer():
     with buffer_lock:
         if not log_buffer:
             return
-        print(f"[*] Flushing {len(log_buffer)} logs to database...")
-        insert_logs_batch(log_buffer)
+        
+        batch = list(log_buffer)
         log_buffer = []
 
+    if remote_url:
+        try:
+            print(f"☁️ Pushing {len(batch)} logs to Vercel...")
+            headers = {"X-CCL-KEY": auth_key, "Content-Type": "application/json"}
+            resp = requests.post(f"{remote_url}/api/v2/ingest", headers=headers, json={"logs": batch})
+            if resp.status_code != 200:
+                print(f"[ERROR] Remote push failed: {resp.status_code} - {resp.text}")
+        except Exception as e:
+            print(f"[ERROR] Remote push failed: {e}")
+    else:
+        # Local SQLite/Postgres
+        insert_logs_batch(batch)
+
 def ticker_flush():
-    """Background thread to flush buffer periodically."""
     while True:
         time.sleep(FLUSH_INTERVAL)
         flush_buffer()
 
 class SyslogUDPHandler(socketserver.BaseRequestHandler):
     def handle(self):
-        data = bytes.decode(self.request[0].strip(), errors='ignore')
+        data = self.request[0].strip().decode('utf-8', errors='ignore')
         process_log(data)
 
 def start_syslog_server(host="0.0.0.0", port=5140):
@@ -130,10 +140,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--import-file", type=str)
+    parser.add_argument("--remote-url", type=str, help="Vercel App URL (e.g. https://ccl-guard.vercel.app)")
+    parser.add_argument("--auth-key", type=str, help="FLASK_SECRET_KEY for authentication")
     args = parser.parse_args()
     
     init_db()
     
+    if args.remote_url:
+        global remote_url, auth_key
+        remote_url = args.remote_url.rstrip("/")
+        auth_key = args.auth_key or os.environ.get("FLASK_SECRET_KEY", "ccl_guard_secure_key")
+        print(f"🚀 Cloud-Sync Mode Active: Pushing to {remote_url}")
+
     if args.import_file:
         import_historical_logs(args.import_file)
     elif args.live:

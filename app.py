@@ -33,7 +33,19 @@ ABUSE_API_KEY = os.environ.get("ABUSE_API_KEY")
 attack_counter = 0
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = "ccl-guard-functional-fallback-key"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "ccl_guard_secure_key")
+
+# Optional Background Workers (Disabled on Vercel)
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+
+@app.before_first_request
+def setup():
+    init_db()
+    if not IS_VERCEL:
+        # Start remediation worker for local/VPS deployments only
+        from remediation_worker import start_remediation_worker
+        threading.Thread(target=start_remediation_worker, daemon=True).start()
+
 # ================= EMAIL CONFIG =================
 print("[SOC] Loading environment variables...")
 EMAIL_FROM = os.environ.get("EMAIL_FROM")
@@ -874,6 +886,24 @@ def api_complete_onboarding():
     
     session["is_first_login"] = 0
     return jsonify({"status": "success"})
+
+@app.route('/api/v2/ingest', methods=['POST'])
+def remote_ingest():
+    """Endpoint for remote collectors (Fortinet Sync) to push logs."""
+    auth_key = request.headers.get("X-CCL-KEY")
+    if auth_key != app.secret_key:
+        return jsonify({"status": "unauthorized"}), 401
+    
+    data = request.json
+    if not data or 'logs' not in data:
+        return jsonify({"status": "invalid_data"}), 400
+    
+    # Logs expected as a list of 12-tuples matching insert_logs_batch
+    try:
+        insert_logs_batch(data['logs'])
+        return jsonify({"status": "success", "count": len(data['logs'])}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route("/login", methods=["GET","POST"])
