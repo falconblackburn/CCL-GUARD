@@ -186,3 +186,15 @@ def get_incident_stats():
         "Closed": stats.get("Closed", 0),
         "total": sum(stats.values())
     }
+# --- ALIASES FOR BACKWARD COMPATIBILITY ---
+def fetch_logs(limit=100): return get_logs(limit)
+def mark_incident_processed(iid): return update_incident_status(iid, 'In Progress')
+def close_incident(iid): return update_incident_status(iid, 'Closed')
+def fetch_logs_paged(offset, limit):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(f"SELECT * FROM logs ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset))
+    rows = c.fetchall()
+    colnames = [desc[0] for desc in c.description]
+    conn.close()
+    return [dict(zip(colnames, row)) for row in rows]

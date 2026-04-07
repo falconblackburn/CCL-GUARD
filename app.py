@@ -249,7 +249,7 @@ class AIAnalysisEngine:
         from dotenv import load_dotenv
         load_dotenv(override=True)
         
-        use_ai = os.environ.get("USE_AI", "true").lower() == "true"
+        use_ai = str(os.environ.get("USE_AI", "true")).lower() == "true"
         gemini_api_key = os.environ.get("GEMINI_API_KEY")
         ollama_model = os.environ.get("OLLAMA_MODEL")
 
@@ -258,7 +258,7 @@ class AIAnalysisEngine:
 
         if not use_ai:
             rule_analysis, rule_remediation = AIAnalysisEngine.get_rule_based_analysis(attack_type, severity, source)
-            return "OFFLINE FALLBACK: " + rule_analysis, rule_remediation
+            return "AGENTIC AI (Local Heuristics): " + rule_analysis, rule_remediation
 
         # 1. CORE CONTEXT GATHERING (Cross-Domain Correlation)
         correlation_context = AIAnalysisEngine.get_correlation_context(0, ip, f"attack={attack_type} {source}")
