@@ -35,16 +35,26 @@ attack_counter = 0
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "ccl_guard_secure_key")
 
-# Optional Background Workers (Disabled on Vercel)
+# Initialization logic
 IS_VERCEL = os.environ.get("VERCEL") == "1"
 
-@app.before_first_request
+# We use a lazy initialization pattern to replace before_first_request
+_initialized = False
+
+@app.before_request
 def setup():
-    init_db()
-    if not IS_VERCEL:
-        # Start remediation worker for local/VPS deployments only
-        from remediation_worker import start_remediation_worker
-        threading.Thread(target=start_remediation_worker, daemon=True).start()
+    global _initialized
+    if not _initialized:
+        print("[SOC] Initializing for first request...")
+        init_db()
+        if not IS_VERCEL:
+            # Start remediation worker for local/VPS deployments only
+            try:
+                from remediation_worker import start_remediation_worker
+                threading.Thread(target=start_remediation_worker, daemon=True).start()
+            except ImportError:
+                print("[WARNING] remediation_worker.py not found.")
+        _initialized = True
 
 # ================= EMAIL CONFIG =================
 print("[SOC] Loading environment variables...")

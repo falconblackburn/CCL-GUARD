@@ -9,8 +9,18 @@ import zipfile
 import io
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = "director-functional-fallback-key"
-init_parent_db()
+app.config['SECRET_KEY'] = os.environ.get("FLASK_SECRET_KEY", "director-functional-fallback-key")
+
+_initialized = False
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+
+@app.before_request
+def setup():
+    global _initialized
+    if not _initialized:
+        print("[DIRECTOR] Initializing for first request...")
+        init_parent_db()
+        _initialized = True
 
 @app.route("/")
 def dashboard():
