@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "framework": "flask",
   "builds": [
     {
       "src": "app.py",
@@ -21,6 +22,7 @@
     }
   ],
   "env": {
-    "VERCEL": "1"
+    "VERCEL": "1",
+    "PYTHON_VERSION": "3.12"
   }
 }

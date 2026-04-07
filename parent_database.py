@@ -14,8 +14,13 @@ def get_parent_connection():
             url = DATABASE_URL.replace("postgres://", "postgresql://")
             return psycopg2.connect(url)
         except ImportError:
-            print("[PARENT DB] psycopg2 not found. Falling back to SQLite.")
+            print("[PARENT DB] psycopg2 not found.")
     
+    # Vercel Read-Only Protection
+    if os.environ.get("VERCEL") == "1" and not DATABASE_URL:
+        print("[DIRECTOR DEMO] Running in Vercel Memory Mode.")
+        return sqlite3.connect(":memory:", check_same_thread=False)
+
     return sqlite3.connect(PARENT_DB_NAME, timeout=20)
 
 def init_parent_db():

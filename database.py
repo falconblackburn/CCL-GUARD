@@ -9,17 +9,20 @@ DB_NAME = os.environ.get("DB_PATH", os.path.join(_BASE_DIR, "soc.db"))
 DATABASE_URL = os.environ.get("DATABASE_URL") # Postgres URL for Vercel/Cloud
 
 def get_connection():
-    """Returns a database connection (Postgres or SQLite)."""
+    """Returns a database connection (Postgres, SQLite, or Memory for Demo)."""
     if DATABASE_URL and (DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://")):
         try:
             import psycopg2
-            # Vercel/Heroku often provide 'postgres://', but SQLAlchemy/Psycopg2 prefer 'postgresql://'
             url = DATABASE_URL.replace("postgres://", "postgresql://")
             return psycopg2.connect(url)
         except ImportError:
-            print("[DB ERROR] psycopg2 not found. Falling back to SQLite.")
+            print("[DB ERROR] psycopg2 not found.")
     
-    # SQLite with timeout for concurrency
+    # Vercel Read-Only Protection: Use memory if no DB_URL is provided in serverless env
+    if os.environ.get("VERCEL") == "1" and not DATABASE_URL:
+        print("[SOC DEMO] Running in Vercel Memory Mode (Volatile).")
+        return sqlite3.connect(":memory:", check_same_thread=False)
+
     return sqlite3.connect(DB_NAME, timeout=20)
 
 def init_db():
