@@ -186,7 +186,7 @@ class AIAnalysisEngine:
             from database import DB_NAME
             import sqlite3
             import re
-            con = sqlite3.connect(DB_NAME)
+            con = get_connection()
             c = con.cursor()
             
             # 1. IP Pivoting
@@ -227,7 +227,7 @@ class AIAnalysisEngine:
         try:
             from database import DB_NAME
             import sqlite3
-            con = sqlite3.connect(DB_NAME)
+            con = get_connection()
             c = con.cursor()
             # Get last 3 approved incidents with feedback
             c.execute("SELECT attack, severity, ai_summary, feedback FROM incidents WHERE approved_action = 1 LIMIT 3")
@@ -423,7 +423,7 @@ print("[SOC] Initializing database")
 init_db()
 
 def create_default_user():
-    con = sqlite3.connect(DB_NAME)
+    con = get_connection()
     c = con.cursor()
     from werkzeug.security import generate_password_hash
     c.execute("SELECT * FROM users")
@@ -708,7 +708,7 @@ def api_history():
 @app.route("/api/log/<int:log_id>")
 def api_get_log(log_id):
     import sqlite3
-    con = sqlite3.connect(DB_NAME)
+    con = get_connection()
     cur = con.cursor()
     cur.execute("SELECT * FROM logs WHERE id = ?", (log_id,))
     row = cur.fetchone()
@@ -726,7 +726,7 @@ def update_incident(iid):
     analyst = request.form.get("analyst")
     comment = request.form.get("comment")
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_connection()
 
     c = conn.cursor()
 
@@ -746,7 +746,7 @@ def update_incident(iid):
 def approve_incident(iid):
     if session.get("role") != "admin": return "Unauthorized", 403
     import sqlite3, datetime
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_connection()
     c = conn.cursor()
     # Unify to 'Closed' so it appears in Archive and counts in Metrics
     c.execute("UPDATE incidents SET approved_action=1, status='Closed', closed_time=datetime('now') WHERE id=?", (iid,))
@@ -761,7 +761,7 @@ def submit_feedback(iid):
     data = request.json
     corrections = data.get("feedback", "")
     import sqlite3
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_connection()
     c = conn.cursor()
     
     # 1. Update incident - Unify to 'Closed' for Archive and Metrics
@@ -782,7 +782,7 @@ def submit_feedback(iid):
 @app.route("/api/incident_report/<int:iid>")
 def get_incident_report(iid):
     import sqlite3
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT * FROM incidents WHERE id=?", (iid,))
     inc = c.fetchone()
@@ -845,7 +845,7 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "ccl-guard-default-secret-ke
 def api_complete_onboarding():
     if "user" not in session: return jsonify({"error": "Unauthorized"}), 401
     
-    con = sqlite3.connect(DB_NAME)
+    con = get_connection()
     c = con.cursor()
     c.execute("UPDATE users SET is_first_login = 0 WHERE username = ?", (session["user"],))
     con.commit()
@@ -920,7 +920,7 @@ def login():
         p = request.form["password"]
 
         import sqlite3
-        con = sqlite3.connect(DB_NAME)
+        con = get_connection()
 
         c = con.cursor()
 
@@ -959,7 +959,7 @@ def report_dashboard():
         return redirect("/login")
     
     import sqlite3, json
-    con = sqlite3.connect(DB_NAME)
+    con = get_connection()
     c = con.cursor()
     c.execute("SELECT ip,attack,severity,risk,time FROM logs ORDER BY id DESC LIMIT 25")
     logs = c.fetchall()
@@ -990,7 +990,7 @@ def generate_pdf_report():
         return redirect("/login")
 
     import sqlite3
-    con = sqlite3.connect(DB_NAME)
+    con = get_connection()
     c = con.cursor()
     c.execute("SELECT ip,attack,severity,risk,time,ai_analysis,source FROM logs ORDER BY id DESC LIMIT 500")
     logs = c.fetchall()
@@ -1262,7 +1262,7 @@ if __name__ == "__main__":
         while True:
             try:
                 # Count active incidents
-                con = sqlite3.connect(DB_NAME)
+                con = get_connection()
                 c = con.cursor()
                 c.execute("SELECT COUNT(*) FROM logs WHERE severity='High' AND risk>=80")
                 count = c.fetchone()[0]

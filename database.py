@@ -78,7 +78,19 @@ def init_db():
         is_first_login INTEGER DEFAULT 1
     )''')
 
-    # 4. Indexes for 5M+ scale
+    # 4. Seed Admin User if empty (Important for Memory Demo Mode)
+    try:
+        c.execute("SELECT COUNT(*) FROM users")
+        if c.fetchone()[0] == 0:
+            print("[DB SEED] Creating default admin user for demo...")
+            from werkzeug.security import generate_password_hash
+            hashed_pw = generate_password_hash("admin123")
+            c.execute("INSERT INTO users (username, password, role, is_first_login) VALUES (?, ?, ?, ?)",
+                      ("admin", hashed_pw, "admin", 0))
+    except Exception as e:
+        print(f"[DB WARNING] Seeding failed: {e}")
+
+    # 5. Indexes for 5M+ scale
     try:
         c.execute("CREATE INDEX IF NOT EXISTS idx_logs_ip ON logs(ip)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_logs_severity ON logs(severity)")
