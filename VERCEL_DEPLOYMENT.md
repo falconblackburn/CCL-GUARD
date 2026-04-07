@@ -7,9 +7,9 @@ This guide provides the most accurate steps to deploy the CCL-Guard SOC Platform
 2. Click **Add New** -> **Project**.
 3. Import your GitHub repository (`CCL-GUARD`).
 
-## 2. Configure Framework
-Vercel should automatically detect **Flask**. If not, ensure these settings:
-- **Framework Preset:** `Other` (or `Flask` if available).
+## 2. Configure Framework & Settings
+- **Framework Preset:** Select **Flask** (Vercel will detect the `vercel.json` I've optimized).
+- **Root Directory:** Keep as `./` (Default).
 - **Build Command:** (Leave Blank)
 - **Output Directory:** (Leave Blank)
 
