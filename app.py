@@ -14,10 +14,12 @@ from flask import session, redirect, url_for, request
 from werkzeug.security import generate_password_hash, check_password_hash
 from email.mime.text import MIMEText
 from flask import send_file
-from reportlab.platypus import Image, SimpleDocTemplate, Paragraph, Spacer, Table
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
+from database import create_incident, mark_incident_processed, close_incident
+from metrics import calculate_metrics
+from flask import session, redirect, url_for, request
+from werkzeug.security import generate_password_hash, check_password_hash
+from email.mime.text import MIMEText
+from flask import send_file
 import os
 import threading
 import time
@@ -25,9 +27,7 @@ import zipfile
 import io
 import shutil
 from collections import Counter
-import matplotlib
-matplotlib.use('Agg') # Non-interactive backend
-import matplotlib.pyplot as plt
+# Matplotlib moved to lazy loading inside functions
 
 ABUSE_API_KEY = os.environ.get("ABUSE_API_KEY")
 attack_counter = 0
@@ -580,6 +580,9 @@ def dashboard():
 
 @app.route("/predict",methods=["POST"])
 def predict():
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
     try:
         data = request.json
         raw_log = f"Packets: {data.get('packets', 0)}, LoginFail: {data.get('login_fail', 0)}, SQL: {data.get('sql', 0)}"
@@ -939,10 +942,7 @@ def login():
 def logout():
     session.clear()
     return redirect("/login")
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import Image, SimpleDocTemplate, Paragraph, Spacer, Table
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+# ReportLab moved to lazy loading inside functions
 from flask import send_file, redirect
 import datetime, sqlite3
 @app.route("/testmail")
@@ -952,6 +952,9 @@ def testmail():
 
 @app.route("/report")
 def report_dashboard():
+    # Lazy imports for PDF generation
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
     if "user" not in session:
         return redirect("/login")
     
@@ -976,6 +979,13 @@ def report_dashboard():
 
 @app.route("/api/generate_report")
 def generate_pdf_report():
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import Image, SimpleDocTemplate, Paragraph, Spacer, Table
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     if "user" not in session:
         return redirect("/login")
 

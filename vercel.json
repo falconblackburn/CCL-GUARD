@@ -1,25 +1,9 @@
 {
   "version": 2,
-  "framework": "flask",
-  "builds": [
-    {
-      "src": "app.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "parent_app.py",
-      "use": "@vercel/python"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/director/(.*)",
-      "dest": "parent_app.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "app.py"
-    }
+  "rewrites": [
+    { "source": "/director/(.*)", "destination": "/api/director" },
+    { "source": "/api/v2/ingest", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/api/index" }
   ],
   "env": {
     "VERCEL": "1",
