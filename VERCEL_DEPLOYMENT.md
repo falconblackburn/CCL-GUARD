@@ -23,9 +23,15 @@ Add these in the **Environment Variables** section of your Vercel project:
 | `GEMINI_API_KEY` | `your-google-ai-key` | Required for AI Remediation. |
 | `DATABASE_URL` | `postgres://...` | **(Optional for Demo)** Required for persistent data. If missing, app uses Memory mode. |
 
-## 4. Deployment Check
-- **Client URL:** `https://your-app.vercel.app/`
-- **Director URL:** `https://your-app.vercel.app/director/`
+## 4. Default Login (Demo Mode)
+If you are using the **Memory Fallback** (no DATABASE_URL), use these default credentials:
+- **Username:** `admin`
+- **Password:** `admin123`
+
+## 5. Accessing the Director Dashboard
+On Vercel, both dashboards are unified under a single domain. **Do NOT use Port 5005.**
+- **Main SOC Client:** `https://your-app.vercel.app/`
+- **Director Dashboard:** `https://your-app.vercel.app/director/`
 
 ---
 
