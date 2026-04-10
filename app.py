@@ -1,25 +1,15 @@
-from dotenv import load_dotenv
-load_dotenv()
-
-from flask import Flask, request, jsonify, render_template
-from database import init_db, insert_log, fetch_logs, DB_NAME
+from config import Config
+from core.database import init_db, insert_log, fetch_logs, get_connection, create_incident, mark_incident_processed, close_incident, connect_with_retry
+from core.metrics import calculate_metrics
+from core.ai_engine import AIAnalysisEngine
 import requests
 import sqlite3
 import datetime
 import smtplib
 import subprocess
-from database import create_incident, mark_incident_processed, close_incident
-from metrics import calculate_metrics
-from flask import session, redirect, url_for, request
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 from email.mime.text import MIMEText
-from flask import send_file
-from database import create_incident, mark_incident_processed, close_incident
-from metrics import calculate_metrics
-from flask import session, redirect, url_for, request
-from werkzeug.security import generate_password_hash, check_password_hash
-from email.mime.text import MIMEText
-from flask import send_file
 import os
 import threading
 import time
@@ -29,11 +19,11 @@ import shutil
 from collections import Counter
 # Matplotlib moved to lazy loading inside functions
 
-ABUSE_API_KEY = os.environ.get("ABUSE_API_KEY")
+ABUSE_API_KEY = os.environ.get("ABUSE_API_KEY") # Keeping some direct lookups if they aren't in Config yet
 attack_counter = 0
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "ccl_guard_secure_key")
+app.secret_key = Config.SECRET_KEY
 
 # Initialization logic
 IS_VERCEL = os.environ.get("VERCEL") == "1"
@@ -57,11 +47,9 @@ def setup():
         _initialized = True
 
 # ================= EMAIL CONFIG =================
-print("[SOC] Loading environment variables...")
-EMAIL_FROM = os.environ.get("EMAIL_FROM")
+EMAIL_FROM = os.environ.get("EMAIL_FROM") # Optional, keep as environment for now
 EMAIL_PASS = os.environ.get("EMAIL_PASS")
 EMAIL_TO   = os.environ.get("EMAIL_TO")
-print(f"[SOC] Email Config: {'Found' if EMAIL_FROM else 'Missing'}")
 
 
 def block_ip(ip):
@@ -119,248 +107,7 @@ def send_email(subject, body):
 
 # ================= AI SOC ENGINE V2 =================
 
-class AIAnalysisEngine:
-    @staticmethod
-    def get_model():
-        """Detect available model or fallback."""
-        try:
-            r = requests.get("http://127.0.0.1:11434/api/tags", timeout=3)
-            models = r.json().get("models", [])
-            # Priority 1: Llama3
-            if any(m['name'].startswith("llama3") for m in models): return "llama3"
-            # Priority 2: Use the first one found (like drana-infinity or mistral)
-            if models: return models[0]['name'] 
-            return "llama3"
-        except:
-            return "llama3"
 
-    @staticmethod
-    def get_rule_based_analysis(attack_type, severity, source):
-        """Dynamic rule-based engine for when AI is unavailable."""
-        remediations = {
-            "SQLInjection": [
-                "Immediate containment: Block Source IP {} at edge firewall.",
-                "Review application code for unsanitized database queries.",
-                "Implement Parameterized Queries or ORM layers.",
-                "Conduct vulnerability scan on web application endpoints."
-            ],
-            "DDoS": [
-                "Traffic Scrubbing: Route traffic through DDoS protection service.",
-                "Apply rate limiting at the Load Balancer level.",
-                "Verify session persistence and block spoofed user agents.",
-                "Coordinate with ISP to drop malicious traffic upstream."
-            ],
-            "BruteForce": [
-                "Temporary lockout: Enable 15-minute lockout for account {} attempts.",
-                "Enforce Multi-Factor Authentication (MFA) across all entry points.",
-                "Rotate user credentials if signs of account takeover exist.",
-                "Implement CAPTCHA on authentication endpoints."
-            ],
-            "PortScan": [
-                "Log and Drop: Blacklist source IP {} for 24 hours.",
-                "Minimize attack surface: Close all non-essential ports.",
-                "Review network security groups and ACLs.",
-                "Enable port-knocking or VPN for administrative access."
-            ],
-            "Generic": [
-                "Investigate alerts from source: {}.",
-                "Check system integrity and audit logs for lateral movement.",
-                "Follow standard IR procedures for {} incidents.",
-                "Isolate affected segments if severity is {}."
-            ]
-        }
-        
-        rules = remediations.get(attack_type, remediations["Generic"])
-        formatted_rem = "\n".join([f"{i+1}. {r.format(source, attack_type, severity)}" for i, r in enumerate(rules)])
-        analysis = f"Heuristic analysis suggests a {severity} severity {attack_type} originates from {source}. Patterns align with known threat actor TTPs (Tactics, Techniques, and Procedures)."
-        
-        return analysis, formatted_rem
-
-    @staticmethod
-    def get_correlation_context(log_id, ip, raw_data):
-        """Pivots across domains (IP, User, Host) to build a unified attack narrative."""
-        context = f"--- CROSS-DOMAIN INVESTIGATION ---\n"
-        context += f"Primary Context (IP {ip}):\n"
-        
-        try:
-            from database import DB_NAME
-            import sqlite3
-            import re
-            con = get_connection()
-            c = con.cursor()
-            
-            # 1. IP Pivoting
-            c.execute("SELECT attack, source, time FROM logs WHERE ip = ? AND id != ? ORDER BY id DESC LIMIT 5", (ip, log_id))
-            ip_history = c.fetchall()
-            for h in ip_history:
-                context += f"- {h[2]} ({h[1]}): {h[0]}\n"
-                
-            # 2. Identity/Domain Pivoting (Extraction)
-            # Find patterns like user=admin or host=serv1
-            user_match = re.search(r"user=([a-zA-Z0-9_-]+)", raw_data)
-            host_match = re.search(r"host=([a-zA-Z0-9_-]+)", raw_data)
-            
-            if user_match:
-                user = user_match.group(1)
-                context += f"\nIdentity Correlation (User: {user}):\n"
-                c.execute("SELECT attack, ip, source, time FROM logs WHERE raw_data LIKE ? AND id != ? LIMIT 5", (f"%user={user}%", log_id))
-                user_logs = c.fetchall()
-                for ul in user_logs:
-                    context += f"- {ul[3]} (at {ul[1]} via {ul[2]}): {ul[0]}\n"
-
-            if host_match:
-                host = host_match.group(1)
-                context += f"\nInfrastructure Correlation (Host: {host}):\n"
-                c.execute("SELECT attack, ip, source, time FROM logs WHERE raw_data LIKE ? AND id != ? LIMIT 5", (f"%host={host}%", log_id))
-                host_logs = c.fetchall()
-                for hl in host_logs:
-                    context += f"- {hl[3]} (at {hl[1]} via {hl[2]}): {hl[0]}\n"
-                    
-            con.close()
-            return context
-        except Exception as e:
-            return f"Correlation failed: {e}"
-
-    @staticmethod
-    def get_few_shot_context():
-        """Fetch human-approved SOC decisions to enable learning via few-shot prompting."""
-        try:
-            from database import DB_NAME
-            import sqlite3
-            con = get_connection()
-            c = con.cursor()
-            # Get last 3 approved incidents with feedback
-            c.execute("SELECT attack, severity, ai_summary, feedback FROM incidents WHERE approved_action = 1 LIMIT 3")
-            approved = c.fetchall()
-            con.close()
-            
-            if not approved: return ""
-            
-            context = "--- LEARNING FROM PAST ANALYST DECISIONS ---\n"
-            for row in approved:
-                context += f"Attack: {row[0]} | Decision: APPROVED | Logic: {row[3] or row[2][:100]}\n"
-            return context + "\n"
-        except:
-            return ""
-
-    @staticmethod
-    def analyze(attack_type, severity, source="Unknown", ip="Unknown"):
-        """Multi-Agent Autonomous Loop: Triage -> Forensics -> Response"""
-        from dotenv import load_dotenv
-        load_dotenv(override=True)
-        
-        use_ai = str(os.environ.get("USE_AI", "true")).lower() == "true"
-        gemini_api_key = os.environ.get("GEMINI_API_KEY")
-        ollama_model = os.environ.get("OLLAMA_MODEL")
-
-        print(f"\n[AI ORCHESTRATOR] New Request: {attack_type} | Severity: {severity} | IP: {ip}", flush=True)
-        print(f"[AI ORCHESTRATOR] AI Enabled: {use_ai} | Gemini Key: {'[PRESENT]' if gemini_api_key else '[MISSING]'} | Ollama: {ollama_model or '[NONE]'}", flush=True)
-
-        if not use_ai:
-            rule_analysis, rule_remediation = AIAnalysisEngine.get_rule_based_analysis(attack_type, severity, source)
-            return "AGENTIC AI (Local Heuristics): " + rule_analysis, rule_remediation
-
-        # 1. CORE CONTEXT GATHERING (Cross-Domain Correlation)
-        correlation_context = AIAnalysisEngine.get_correlation_context(0, ip, f"attack={attack_type} {source}")
-        learning_context = AIAnalysisEngine.get_few_shot_context()
-        
-        # --- AGENT 1: TRIAGE (False Positive Filter) ---
-        triage_prompt = (
-            f"Role: SOC Triage Agent\n"
-            f"Target: {attack_type} ({severity})\n"
-            f"Context: {correlation_context}\n"
-            f"Task: Is this a legitimate threat or a false positive? Answer in one sentence."
-        )
-        
-        # --- AGENT 2: FORENSICS (Deep Investigation) ---
-        forensics_prompt = (
-            f"Role: SOC Forensic Investigator\n"
-            f"Current Event: {attack_type} from {ip} via {source}\n"
-            f"Unified Narrative Context: {correlation_context}\n"
-            f"{learning_context}"
-            f"Task: Correlate this event. Is it a persistent campaign? Mapping to MITRE ATT&CK?\n"
-            f"Format response as: Analysis: <detailed reasoning>"
-        )
-
-        # --- AGENT 3: RESPONSE (Remediation Agent) ---
-        response_prompt = (
-            f"Role: SOC Response Architect\n"
-            f"Threat: {attack_type} (Confirmed by Triage/Forensics)\n"
-            f"Task: Provide actionable remediation steps.\n"
-            f"Format response as: Remediation:\n1. <Step 1>\n2. <Step 2>"
-        )
-
-        full_prompt = (
-            f"You are the Agentic SOC Orchestrator. Execute the following loop:\n\n"
-            f"GOAL: Contain the {attack_type} threat from {ip}/{source} while minimizing business impact.\n\n"
-            f"1. TRIAGE: {triage_prompt}\n"
-            f"2. FORENSICS: {forensics_prompt}\n"
-            f"3. RESPONSE: {response_prompt}\n\n"
-            f"Provide a goal-driven response strategy. If the threat is confirmed, select from: [BLOCK_IP, ISOLATE_HOST, SUSPEND_USER, BLOCK_DOMAIN].\n\n"
-            f"Return the combined result in this exact format:\n"
-            f"Analysis: [Combined Triage & Forensic Insights]\n"
-            f"Remediation: [Response Steps]\n"
-            f"RecommendedAction: [ACTION_NAME]"
-        )
-
-        # --- AI EXECUTION LOOP ---
-        gemini_api_key = os.environ.get("GEMINI_API_KEY")
-        ollama_model = os.environ.get("OLLAMA_MODEL")
-
-        # 1. Try Google Gemini (Priority for high-fidelity responses)
-        if gemini_api_key:
-            try:
-                print(f"[SOC AGENTIC LOOP] Attempting Gemini 1.5 Flash for {attack_type}...")
-                import google.generativeai as genai
-                genai.configure(api_key=gemini_api_key)
-                model = genai.GenerativeModel("gemini-1.5-flash") # Reverted to 1.5 for maximum compatibility
-                response_obj = model.generate_content(full_prompt)
-                response = response_obj.text
-                print(f"[SOC DEBUG] Gemini Response Received ({len(response)} chars)")
-                
-                if "Analysis:" in response and "Remediation:" in response:
-                    parts = response.split("Remediation:")
-                    return parts[0].replace("Analysis:", "").strip(), parts[1].strip()
-                else:
-                    return response.strip(), "1. Review logs.\n2. Apply firewall blocks.\n3. Verify identity."
-            except Exception as gemini_e:
-                error_msg = str(gemini_e)
-                print(f"[SOC GEMINI ERROR] {error_msg}")
-                
-                # Check for Rate Limits (429) OR Internal Failures
-                if "429" in error_msg or "quota" in error_msg.lower():
-                    print("[SOC AI] Rate Limit Detected. Switching to High-Fidelity AI Simulation for testing.")
-                    # Return a realistic AI analysis so the dashboard still looks premium
-                    sim_analysis = (
-                        f"SYNTHETIC AI INSIGHT: Heuristic modeling suggests {attack_type} pattern matches T1110. "
-                        f"Correlation from {source} indicates source {ip} is non-standard. "
-                        f"Anomaly score: {92}%"
-                    )
-                    sim_remediation = (
-                        f"1. Adaptive Block: Restrict {ip} for 3600s.\n"
-                        f"2. Forensic Audit: Review auth logs for {source}.\n"
-                        f"3. Hardening: Enable MFA for targeted accounts."
-                    )
-                    return sim_analysis, sim_remediation
-
-        # 2. Try Ollama (Local Backup)
-        if ollama_model:
-            try:
-                print(f"[SOC AGENTIC LOOP] Attempting Ollama ({ollama_model}) for {attack_type}...")
-                r = requests.post("http://127.0.0.1:11434/api/generate", 
-                                  json={"model": ollama_model, "prompt": full_prompt, "stream": False},
-                                  timeout=10)
-                response = r.json().get("response", "").strip()
-                if "Analysis:" in response and "Remediation:" in response:
-                    parts = response.split("Remediation:")
-                    return parts[0].replace("Analysis:", "").strip(), parts[1].strip()
-            except Exception as e:
-                print(f"[SOC OLLAMA ERROR] {e}")
-
-        # --- FINAL RULE-BASED FALLBACK ---
-        print("[SOC AGENTIC LOOP] Using high-fidelity rule-based engine.")
-        rule_analysis, rule_remediation = AIAnalysisEngine.get_rule_based_analysis(attack_type, severity, source)
-        return "AGENTIC AI: " + rule_analysis, rule_remediation
 
 def fetch_live_threat_intel():
     """Pulls live indicators from URLHaus (Free Feed)"""
@@ -375,7 +122,7 @@ def fetch_live_threat_intel():
 
         data = r.json()
         if data.get("status") == "ok":
-            from database import insert_threat_intel
+            from core.database import insert_threat_intel
             for item in data.get("urls", [])[:10]:
                 source = "URLHaus"
                 indicator = item.get("url")
@@ -390,7 +137,7 @@ def generate_mock_intel():
     # Attempt to pull live data
     fetch_live_threat_intel()
     
-    from database import insert_brand_alert, insert_threat_intel
+    from core.database import insert_brand_alert, insert_threat_intel
     
     # Brand Protection Alerts (Keep some mock for demo)
     insert_brand_alert("Domain Squatting", "ccl-agentic-msoc.co", "High-confidence spoofing domain detected.", "High")
@@ -463,8 +210,8 @@ def dashboard():
     metrics = {"mttd": 0, "mtti": 0, "mttr": 0}
     role = session.get("role", "analyst")
 
-    from database import fetch_logs, fetch_incidents, fetch_threat_feeds, DB_NAME, connect_with_retry, get_incident_stats
-    from metrics import calculate_metrics
+    from core.database import fetch_logs, fetch_incidents, fetch_threat_feeds, DB_NAME, connect_with_retry, get_incident_stats
+    from core.metrics import calculate_metrics
 
     print(f"DEBUG: Dashboard route triggered for user: {session.get('user')}")
     try:
@@ -588,7 +335,7 @@ def predict():
         raw_log = f"Packets: {data.get('packets', 0)}, LoginFail: {data.get('login_fail', 0)}, SQL: {data.get('sql', 0)}"
 
         # ML-POWERED DETECTION (CIC-IDS2017 Model)
-        from ml_engine import ml_engine
+        from core.ml_engine import ml_engine
         attack, confidence = ml_engine.predict(raw_log)
         
         severity, risk, mitre = severity_risk_mitre(attack)
@@ -604,7 +351,7 @@ def predict():
             print(f"🔥 [AI ENGINE ERROR] {ai_e}")
             analysis, remediation = AIAnalysisEngine.get_rule_based_analysis(attack, severity, "NetworkSensor")
         
-        from database import insert_log, create_incident
+        from core.database import insert_log, create_incident
         insert_log(
             "NetworkSensor", ip, country, raw_log, 
             f"ML:{attack} ({int(confidence*100)}%)", 
@@ -613,7 +360,7 @@ def predict():
         )
         
         if attack != "BENIGN":
-            create_incident(f"ML:{attack}", severity, risk, phase, analysis[:100], remediation, "NetworkSensor")
+            create_incident(f"ML:{attack}", severity, risk, phase, analysis[:100], remediation, "NetworkSensor", ip)
         
         return jsonify({
             "status": "classified", 
@@ -642,7 +389,7 @@ def incidents_view():
 # INCIDENT API (JSON)
 @app.route("/api/incidents")
 def api_incidents():
-    from database import fetch_incidents
+    from core.database import fetch_incidents
     # Default to last 100 for performance; frontend can request more if needed
     rows = fetch_incidents(limit=100)
     return jsonify(rows)
@@ -652,7 +399,7 @@ def api_incidents():
 @app.route("/api/incident/mark_processed/<int:iid>", methods=["POST"])
 def api_mark_processed(iid):
     if "user" not in session: return "Unauthorized", 401
-    from database import mark_incident_processed
+    from core.database import mark_incident_processed
     mark_incident_processed(iid)
     return jsonify({"status": "Incident investigation started"})
 
@@ -690,6 +437,95 @@ def attack_count():
     return jsonify({"count":attack_counter})
 init_db()
 
+@app.route("/threat-map")
+def threat_map():
+    if "user" not in session:
+        return redirect("/login")
+    return render_template("threat_map.html")
+
+@app.route("/api/network_map_data")
+def network_map_data():
+    from core.database import get_connection
+    con = get_connection()
+    c = con.cursor()
+    # Pull current active/open incidents with the new attacker_ip field
+    c.execute("SELECT id, attack, severity, source, attacker_ip, time FROM incidents WHERE status = 'Open' LIMIT 100")
+    rows = c.fetchall()
+    colnames = [desc[0] for desc in c.description]
+    incidents = [dict(zip(colnames, row)) for row in rows]
+    con.close()
+    
+    nodes_dict = {}
+    edges_dict = {}
+    
+    # Define a static "Security Center" node as the ultimate target (optional, but helps keep the map centered)
+    nodes_dict["SOC_CORE"] = {
+        "id": "SOC_CORE",
+        "label": "SOC HUB",
+        "group": "asset",
+        "title": "Central Monitoring Engine",
+        "value": 5
+    }
+
+    for inc in incidents:
+        origin = inc.get("attacker_ip", "Unknown")
+        target_asset = inc.get("source", "Internal Network")
+        attack_type = inc.get("attack", "Unknown")
+        severity = inc.get("severity", "Low").lower()
+        
+        # Threat node (Origin)
+        if origin not in nodes_dict:
+            nodes_dict[origin] = {
+                "id": origin, 
+                "label": f"Attacker\n{origin}", 
+                "group": "attacker",
+                "title": f"Incident #{inc.get('id')} - {attack_type}",
+                "value": 1
+            }
+        else:
+            nodes_dict[origin]["value"] += 1
+            
+        # Target node (The Asset/Sensor that detected it)
+        if target_asset not in nodes_dict:
+            nodes_dict[target_asset] = {
+                "id": target_asset,
+                "label": f"Asset\n{target_asset}",
+                "group": "asset",
+                "title": "Protected Infrastructure"
+            }
+            
+        # Edge definition: Origin (Attacker) -> Target (Asset)
+        edge_id = f"{origin}->{target_asset}_{attack_type}"
+        if edge_id not in edges_dict:
+            color = "#ef4444" if severity in ["critical", "high"] else "#f59e0b"
+            edges_dict[edge_id] = {
+                "id": edge_id,
+                "from": origin,
+                "to": target_asset,
+                "label": attack_type,
+                "color": {"color": color},
+                "value": 1
+            }
+        else:
+            edges_dict[edge_id]["value"] += 1
+            
+        # Also link Asset to SOC HUB for global status
+        hub_edge_id = f"{target_asset}->SOC_CORE"
+        if hub_edge_id not in edges_dict:
+            edges_dict[hub_edge_id] = {
+                "id": hub_edge_id,
+                "from": target_asset,
+                "to": "SOC_CORE",
+                "label": "Reporting",
+                "color": {"color": "#38bdf8"},
+                "value": 1
+            }
+
+    return jsonify({
+        "nodes": list(nodes_dict.values()),
+        "edges": list(edges_dict.values())
+    })
+
 @app.route("/history")
 def history():
 
@@ -700,21 +536,24 @@ def history():
 
 @app.route("/api/history")
 def api_history():
-    from database import fetch_logs
+    from core.database import fetch_logs
     # Default to last 100 for safety on high-volume 5M+ tables
     rows = fetch_logs(limit=100)
     return jsonify(rows)
 
 @app.route("/api/log/<int:log_id>")
 def api_get_log(log_id):
-    import sqlite3
+    from core.database import get_connection
     con = get_connection()
-    cur = con.cursor()
-    cur.execute("SELECT * FROM logs WHERE id = ?", (log_id,))
-    row = cur.fetchone()
-    con.close()
+    c = con.cursor()
+    c.execute("SELECT * FROM logs WHERE id = ?", (log_id,))
+    row = c.fetchone()
     if row:
-        return jsonify(row)
+        colnames = [desc[0] for desc in c.description]
+        log_dict = dict(zip(colnames, row))
+        con.close()
+        return jsonify(log_dict)
+    con.close()
     return jsonify({"error": "Log not found"}), 404
 # ASSIGN ANALYST + COMMENT
 @app.route("/update_incident/<int:iid>", methods=["POST"])
@@ -868,7 +707,7 @@ def remote_ingest():
             raw_log = str(data.get("log", ""))
             
             # ML Prediction
-            from ml_engine import ml_engine
+            from core.ml_engine import ml_engine
             attack, confidence = ml_engine.predict(raw_log)
             severity, risk, mitre = severity_risk_mitre(attack)
             phase = attack_phase(attack)
@@ -879,11 +718,11 @@ def remote_ingest():
             # Synchronous AI Analysis for immediate feedback
             analysis, remediation = AIAnalysisEngine.analyze(attack, severity, source, ip)
             
-            from database import insert_log, create_incident
+            from core.database import insert_log, create_incident
             insert_log(source, ip, country, raw_log, f"ML:{attack}", severity, risk, mitre, analysis, remediation, int(confidence*100), phase)
             
             if attack != "BENIGN":
-                create_incident(f"ML:{attack}", severity, risk, phase, analysis[:100], remediation, source)
+                create_incident(f"ML:{attack}", severity, risk, phase, analysis[:100], remediation, source, ip)
             
             return jsonify({
                 "status": "ingested", 
@@ -962,15 +801,17 @@ def report_dashboard():
     con = get_connection()
     c = con.cursor()
     c.execute("SELECT ip,attack,severity,risk,time FROM logs ORDER BY id DESC LIMIT 25")
-    logs = c.fetchall()
+    rows = c.fetchall()
+    colnames = [desc[0] for desc in c.description]
+    logs = [dict(zip(colnames, row)) for row in rows]
     con.close()
     
     # Process data for charts
-    severities = [l[2] for l in logs]
-    sev_count = Counter(severities)
+    severities = [l['severity'] for l in logs]
+    sev_count = dict(Counter(severities))
     
-    attacks = [l[1] for l in logs]
-    atk_count = Counter(attacks)
+    attacks = [l['attack'] for l in logs]
+    atk_count = dict(Counter(attacks))
     
     return render_template("reporting.html", 
                            logs=logs, 
@@ -993,7 +834,9 @@ def generate_pdf_report():
     con = get_connection()
     c = con.cursor()
     c.execute("SELECT ip,attack,severity,risk,time,ai_analysis,source FROM logs ORDER BY id DESC LIMIT 500")
-    logs = c.fetchall()
+    rows = c.fetchall()
+    colnames = [desc[0] for desc in c.description]
+    logs = [dict(zip(colnames, row)) for row in rows]
     con.close()
     
     if not logs:
@@ -1002,15 +845,15 @@ def generate_pdf_report():
     report_dir = os.path.join(os.getcwd(), "reports")
     os.makedirs(report_dir, exist_ok=True)
 
-    # ... generate images for PDF ...
-    sev_count = Counter([l[2] for l in logs])
+    # --- generate images for PDF ---
+    sev_count = Counter([l['severity'] for l in logs])
     plt.figure()
     plt.pie(sev_count.values(), labels=sev_count.keys(), autopct="%1.1f%%", colors=["red", "orange", "green"])
     plt.title("Severity Distribution")
     plt.savefig(os.path.join(report_dir, "severity.png"))
     plt.close()
 
-    atk_count = Counter([l[1] for l in logs])
+    atk_count = Counter([l['attack'] for l in logs])
     top_5_atk = dict(atk_count.most_common(5))
     plt.figure(figsize=(6, 4))
     plt.bar(top_5_atk.keys(), top_5_atk.values(), color="#2563eb")
@@ -1020,22 +863,22 @@ def generate_pdf_report():
     plt.savefig(os.path.join(report_dir, "attacks.png"))
     plt.close()
 
-    critical_count = len([l for l in logs if l[2] in ["High", "Critical"]])
-    ai_remediated = len([l for l in logs if l[5] and "Pending" not in l[5] and "Routine" not in l[5]])
+    critical_count = len([l for l in logs if l['severity'] in ["High", "Critical"]])
+    ai_remediated = len([l for l in logs if l['ai_analysis'] and "Pending" not in l['ai_analysis'] and "Routine" not in l['ai_analysis']])
   
-    ips = [l[0] for l in logs]
-    attacks = [l[1] for l in logs]
-    risks = [(l[0], l[3]) for l in logs]
-    sources = [l[6] for l in logs]
+    ips = [l['ip'] for l in logs]
+    attacks = [l['attack'] for l in logs]
+    risks = [(l['ip'], l['risk']) for l in logs]
+    sources = [l['source'] for l in logs]
 
     top_attack = Counter(attacks).most_common(1)[0][0]
     top_ip = Counter(ips).most_common(1)[0][0]
     top_source = Counter(sources).most_common(1)[0][0]
 
     highest_risk_ip = max(risks, key=lambda x: x[1])[0] if risks else "N/A"
-    highest_risk_score = max((l[3] for l in logs), default=0)
+    highest_risk_score = max((l['risk'] for l in logs), default=0)
 
-    times = [l[4][:13] if l[4] else "Unknown" for l in logs]
+    times = [l['time'][:13] if l['time'] else "Unknown" for l in logs]
     peak_time = Counter(times).most_common(1)[0][0] + ":00"
 
     styles = getSampleStyleSheet()
@@ -1197,8 +1040,8 @@ def receive_update():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    from api_assistant import handle_assistant_query
-    from hunter import agentic_hunt
+    from core.api_assistant import handle_assistant_query
+    from core.hunter import agentic_hunt
     
     @app.route("/api/assistant", methods=["POST"])
     def api_assistant():
@@ -1286,17 +1129,17 @@ def api_close_incident(iid):
     if session.get("role") != "admin": return "Forbidden", 403
     data = request.json
     feedback = data.get("comment", "No feedback provided.")
-    from database import close_incident
+    from core.database import close_incident
     close_incident(iid, session["user"], feedback)
     return jsonify({"status": "Incident closed and metrics updated"})
 
 if __name__ == "__main__":
     # Start threads
-    from cloudflare_sync import cloudflare_worker
-    from aws_sync import aws_worker
-    from azure_sync import azure_worker
-    from splunk_sync import splunk_worker
-    from detection_engineer import detection_engine_worker
+    from api.cloudflare_sync import cloudflare_worker
+    from api.aws_sync import aws_worker
+    from api.azure_sync import azure_worker
+    from api.splunk_sync import splunk_worker
+    from core.detection_engineer import detection_engine_worker
     
     print("[SOC] Starting background threads...")
     threading.Thread(target=threat_intel_worker, daemon=True).start()
@@ -1309,5 +1152,5 @@ if __name__ == "__main__":
     threading.Thread(target=splunk_worker, daemon=True).start()
     threading.Thread(target=detection_engine_worker, daemon=True).start()
 
-    print("[SOC] Initializing Flask - Binding to 0.0.0.0:5001...")
-    app.run(host="0.0.0.0", port=5001)
+    print(f"[SOC] Initializing Flask - Binding to 0.0.0.0:{Config.CLIENT_PORT}...")
+    app.run(host="0.0.0.0", port=Config.CLIENT_PORT)

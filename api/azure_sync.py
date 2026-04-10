@@ -8,7 +8,7 @@ try:
 except ImportError:
     requests = None
 
-from database import insert_log, DB_NAME, create_incident
+from core.database import insert_log, DB_NAME, create_incident
 
 def azure_worker():
     """Background thread to poll Microsoft Defender for Cloud alerts using Microsoft Graph API."""

@@ -9,7 +9,7 @@ try:
 except ImportError:
     boto3 = None
 
-from database import insert_log, DB_NAME, create_incident
+from core.database import insert_log, DB_NAME, create_incident
 
 def aws_worker():
     """Background thread to poll AWS GuardDuty for new findings."""

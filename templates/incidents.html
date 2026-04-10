@@ -21,6 +21,7 @@
                 <a href="/incidents" class="active">Incidents</a>
                 <a href="/history">Threat Hunting</a>
                 <a href="/report">Reporting</a>
+                <a href="/threat-map">Threat Map</a>
                 <a href="/logout">Logout</a>
                 <button id="theme-toggle" class="badge"
                     style="margin-left: 1.5rem; background: var(--glass-border); color: var(--text-primary); border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;">
@@ -164,8 +165,8 @@
         function renderIncidents() {
             const sevFilter = document.getElementById('severity-filter').value.toLowerCase();
             const filtered = incidentData.filter(i => {
-                const matchesStatus = i[5] === currentStatus;
-                const matchesSeverity = sevFilter === 'all' || i[2].toLowerCase() === sevFilter;
+                const matchesStatus = i.status === currentStatus;
+                const matchesSeverity = sevFilter === 'all' || (i.severity && i.severity.toLowerCase() === sevFilter);
                 return matchesStatus && matchesSeverity;
             });
 
@@ -174,45 +175,45 @@
             const tbody = document.getElementById('incidents-body');
             tbody.innerHTML = filtered.map(i => `
                         <tr>
-                            <td onclick="toggleDetails(${i[0]})" style="cursor:pointer;"><i data-lucide="chevron-right" id="chevron-${i[0]}" style="width:16px;"></i></td>
-                            <td>#${i[0]}</td>
+                            <td onclick="toggleDetails(${i.id})" style="cursor:pointer;"><i data-lucide="chevron-right" id="chevron-${i.id}" style="width:16px;"></i></td>
+                            <td>#${i.id}</td>
                             <td>
-                                <strong>${i[1]}</strong>
-                                ${currentStatus === 'Closed' ? `<br><span class="text-xs" style="color:var(--accent-blue)">Resolution: ${i[8] || 'No comment'} - ${i[12]}</span>` : ''}
+                                <strong>${i.attack}</strong>
+                                ${currentStatus === 'Closed' ? `<br><span class="text-xs" style="color:var(--accent-blue)">Resolution: ${i.comment || 'No comment'} - ${i.feedback || ''}</span>` : ''}
                             </td>
-                            <td><span class="badge badge-${(i[2] || 'low').toLowerCase()}">${i[2]}</span></td>
-                            <td>${i[3]}%</td>
-                            <td>${i[5]}</td>
-                            <td>${i[14]}</td>
+                            <td><span class="badge badge-${(i.severity || 'low').toLowerCase()}">${i.severity}</span></td>
+                            <td>${i.risk}%</td>
+                            <td>${i.status}</td>
+                            <td>${i.time}</td>
                             <td style="${currentStatus === 'Closed' ? 'display:none' : ''}">
-                                <button class="btn-link" onclick="openResolveModal(${i[0]})">Resolve</button>
+                                <button class="btn-link" onclick="openResolveModal(${i.id})">Resolve</button>
                             </td>
                         </tr>
-                        <tr id="details-${i[0]}" class="details-row" style="display:none;">
+                        <tr id="details-${i.id}" class="details-row" style="display:none;">
                             <td colspan="8">
                                 <div class="details-container card">
                                     <div class="main-grid" style="grid-template-columns: 1fr 1fr; gap:1rem; padding:1rem;">
                                         <div class="ai-report" style="margin:0;">
                                             <h4 class="text-xs" style="color:var(--accent-blue); margin-bottom:0.5rem;"><i data-lucide="info" style="width:12px; margin-right:4px;"></i> AI SUMMARY</h4>
-                                            <p class="text-xs">${i[9] || 'No summary available.'}</p>
+                                            <p class="text-xs">${i.ai_summary || 'No summary available.'}</p>
                                         </div>
                                         <div class="ai-remediation" style="margin:0;">
                                             <h4 class="text-xs" style="color:var(--success); margin-bottom:0.5rem;"><i data-lucide="check-circle" style="width:12px; margin-right:4px;"></i> REMEDIATION STEPS</h4>
-                                            <p class="text-xs" style="white-space: pre-line;">${i[10] || 'No remediation steps provided.'}</p>
+                                            <p class="text-xs" style="white-space: pre-line;">${i.remediation_steps || 'No remediation steps provided.'}</p>
                                         </div>
                                     </div>
                                     <div style="padding: 0 1rem 1rem 1rem; border-top: 1px solid var(--glass-border); padding-top:0.5rem; display:flex; justify-content:space-between; align-items:center;">
                                         <div>
-                                            <span class="text-xs" style="opacity:0.6;">MITRE ATT&CK Phase: <strong>${i[4]}</strong></span>
-                                            <span class="text-xs" style="opacity:0.6; margin-left:1rem;">Source: <strong>${i[6]}</strong></span>
+                                            <span class="text-xs" style="opacity:0.6;">MITRE ATT&CK Phase: <strong>${i.phase || 'N/A'}</strong></span>
+                                            <span class="text-xs" style="opacity:0.6; margin-left:1rem;">Source: <strong>${i.source || 'N/A'}</strong></span>
                                         </div>
                                         <div style="display:flex; gap:0.5rem;">
-                                            <button class="badge" style="background:var(--success); color:white; border:none; cursor:pointer;" onclick="approveAction(${i[0]})">Approve Action</button>
-                                            <button class="badge" style="background:var(--warning); color:black; border:none; cursor:pointer;" onclick="openFeedbackModal(${i[0]})">Correct AI</button>
-                                            <a href="/api/incident_report/${i[0]}" target="_blank" class="badge" style="background:var(--accent-blue); color:white; border:none; cursor:pointer; text-decoration:none;">View Report</a>
+                                            <button class="badge" style="background:var(--success); color:white; border:none; cursor:pointer;" onclick="approveAction(${i.id})">Approve Action</button>
+                                            <button class="badge" style="background:var(--warning); color:black; border:none; cursor:pointer;" onclick="openFeedbackModal(${i.id})">Correct AI</button>
+                                            <a href="/api/incident_report/${i.id}" target="_blank" class="badge" style="background:var(--accent-blue); color:white; border:none; cursor:pointer; text-decoration:none;">View Report</a>
                                         </div>
                                     </div>
-                                    ${i[12] ? `<div style="padding: 0.5rem 1rem; background:rgba(255,165,0,0.1); border-top:1px solid var(--warning);"><span class="text-xs" style="color:var(--warning);"><strong>Analyst Feedback:</strong> ${i[12]}</span></div>` : ''}
+                                    ${i.feedback ? `<div style="padding: 0.5rem 1rem; background:rgba(255,165,0,0.1); border-top:1px solid var(--warning);"><span class="text-xs" style="color:var(--warning);"><strong>Analyst Feedback:</strong> ${i.feedback}</span></div>` : ''}
                                 </div>
                             </td>
                         </tr>

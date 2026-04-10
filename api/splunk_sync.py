@@ -7,7 +7,7 @@ try:
 except ImportError:
     requests = None
 
-from database import insert_log, DB_NAME, create_incident
+from core.database import insert_log, DB_NAME, create_incident
 
 def splunk_worker():
     """Background thread to poll Splunk Enterprise/Cloud for high-fidelity alerts."""

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI SOC | Network Threat Mapper</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='executive.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Vis.js for Network Mapping -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif !important; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        .map-wrapper {
+            flex: 1;
+            margin: 0rem 2rem 2rem 2rem;
+            position: relative;
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--glass-border);
+            border-radius: 1rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #network-map {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+        }
+
+        .map-header {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            z-index: 10;
+            background: var(--bg-card);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+            max-width: 300px;
+        }
+
+        .legend {
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .btn-refresh {
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-top: 1rem;
+            transition: 0.3s;
+        }
+
+        .btn-refresh:hover {
+            opacity: 0.8;
+            transform: translateY(-1px);
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 10;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .vis-network:focus {
+            outline: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container" style="max-height: auto; flex: none;">
+        <header>
+            <div class="logo-wrapper">
+                <div class="logo">CCL Guard</div>
+                <div class="slogan">Intelligence-Driven Cyber Defense</div>
+            </div>
+            <nav style="display: flex; align-items: center;">
+                <a href="/">Dashboard</a>
+                <a href="/incidents">Incidents</a>
+                <a href="/history">Threat Hunting</a>
+                <a href="/report">Reporting</a>
+                <a href="/threat-map" class="active">Threat Map</a>
+                <a href="/logout">Logout</a>
+                <button id="theme-toggle" class="badge"
+                    style="margin-left: 1.5rem; background: var(--glass-border); color: var(--text-primary); border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;">
+                    <i data-lucide="sun" id="theme-icon" style="width: 16px;"></i>
+                    <span id="theme-text">Light Mode</span>
+                </button>
+            </nav>
+        </header>
+    </div>
+
+    <!-- Map Canvas -->
+    <div class="map-wrapper">
+        <div class="map-header">
+            <h2 style="font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <i data-lucide="network"></i> Client Threat Mapper
+            </h2>
+            <p style="font-size: 0.85rem; color: var(--text-secondary);">Real-time visualization of external attacks targeting internal infrastructure.</p>
+            
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div> Attacker Node</div>
+                <div class="legend-item"><div class="legend-color" style="background: #38bdf8;"></div> Protected Asset/Sensor</div>
+            </div>
+
+            <div id="map-status" style="font-size: 0.75rem; margin-top: 0.5rem; color: var(--accent-blue); font-weight: 600;">
+                Initializing radar...
+            </div>
+
+            <button class="btn-refresh" onclick="loadMapData()">
+                <i data-lucide="refresh-cw" style="width:14px;"></i> Sync Radar
+            </button>
+        </div>
+
+        <div id="network-map"></div>
+
+        <div class="controls">
+            <div class="badge" style="background: var(--bg-card); color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem; border: 1px solid var(--glass-border);">
+                Scroll to Zoom | Drag to Pan
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- THEME ENGINE ---
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const themeText = document.getElementById('theme-text');
+        const html = document.documentElement;
+
+        function setTheme(theme) {
+            html.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            themeIcon.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
+            themeText.innerText = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+            lucide.createIcons();
+        }
+
+        if(themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                const currentTheme = html.getAttribute('data-theme');
+                setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+            });
+        }
+
+        // Initialize theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme);
+
+        lucide.createIcons();
+
+        // Vis.js Map Initialization
+        var network = null;
+
+        function drawMap(nodesArray, edgesArray) {
+            const container = document.getElementById('network-map');
+            
+            // Nodes config
+            const nodes = new vis.DataSet(nodesArray.map(node => {
+                let color, iconNode;
+                if(node.group === 'attacker') {
+                    color = { border: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', highlight: { border: '#ef4444', background: '#ef4444' } };
+                    iconNode = '\uf21b'; // FontAwesome hacking icon (placeholder, using shape instead)
+                } else {
+                    color = { border: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', highlight: { border: '#38bdf8', background: '#38bdf8' } };
+                    iconNode = '\uf233'; // server icon
+                }
+                
+                return {
+                    id: node.id,
+                    label: node.label,
+                    title: node.title,
+                    value: node.value,
+                    shape: 'dot',
+                    color: color,
+                    font: { color: '#e2e8f0', face: 'Inter', size: 14 }
+                };
+            }));
+
+            // Edges config
+            const edges = new vis.DataSet(edgesArray.map(edge => {
+                return {
+                    from: edge.from,
+                    to: edge.to,
+                    label: edge.label,
+                    color: edge.color,
+                    value: edge.value,
+                    arrows: 'to',
+                    font: { align: 'middle', color: '#94a3b8', strokeWidth: 0, size: 12 },
+                    smooth: { type: 'dynamic' }
+                };
+            }));
+
+            const data = { nodes: nodes, edges: edges };
+            const options = {
+                nodes: {
+                    scaling: { min: 10, max: 30 },
+                    borderWidth: 2,
+                    shadow: true
+                },
+                edges: {
+                    scaling: { min: 1, max: 4 },
+                    shadow: true,
+                    smooth: true
+                },
+                physics: {
+                    forceAtlas2Based: {
+                        gravitationalConstant: -26,
+                        centralGravity: 0.005,
+                        springLength: 230,
+                        springConstant: 0.18
+                    },
+                    maxVelocity: 146,
+                    solver: 'forceAtlas2Based',
+                    timestep: 0.35,
+                    stabilization: { iterations: 150 }
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 200,
+                    zoomView: true
+                }
+            };
+
+            if (network !== null) {
+                network.destroy();
+            }
+            network = new vis.Network(container, data, options);
+        }
+
+        function loadMapData() {
+            console.log("[SOC] Fetching map data...");
+            const btn = document.querySelector('.btn-refresh i');
+            if (btn) {
+                btn.classList.add('lucide-spin');
+                btn.style.animation = "spin 2s linear infinite";
+            }
+
+            fetch('/api/network_map_data')
+                .then(res => {
+                    if (!res.ok) throw new Error("API returned " + res.status);
+                    return res.json();
+                })
+                .then(data => {
+                    if (btn) {
+                        btn.classList.remove('lucide-spin');
+                        btn.style.animation = "";
+                    }
+                    console.log("[SOC] Map data received:", data);
+                    document.getElementById('map-status').innerText = `Radar Active: ${data.nodes.length} Nodes, ${data.edges.length} Edges detected.`;
+                    drawMap(data.nodes, data.edges);
+                })
+                .catch(err => {
+                    console.error("[SOC] Failed to fetch map data", err);
+                    document.getElementById('map-status').innerText = "Radar Error: Could not reach ingestion API.";
+                    if (btn) {
+                        btn.classList.remove('lucide-spin');
+                        btn.style.animation = "";
+                    }
+                });
+        }
+
+        // Add spinning animation style dynamically
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @keyframes spin { 100% { -webkit-transform: rotate(360deg); transform:rotate(360deg); } }
+        `;
+        document.head.appendChild(style);
+
+        // Load map on start
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("[SOC] Threat Map DOM loaded.");
+            loadMapData();
+            // Auto refresh every 30 seconds
+            setInterval(loadMapData, 30000);
+        });
+    </script>
+</body>
+
+</html>

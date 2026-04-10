@@ -3,8 +3,8 @@ import sqlite3
 from flask import jsonify, request
 
 # DB path - must match database.py exactly
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_NAME = os.environ.get("DB_PATH", os.path.join(_BASE_DIR, "soc.db"))
+from config import Config
+DB_NAME = Config.DB_NAME
 
 def handle_assistant_query():
     """Handle natural language queries using Gemini."""

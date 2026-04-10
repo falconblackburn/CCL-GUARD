@@ -74,7 +74,13 @@
                 <a href="/incidents">Incidents</a>
                 <a href="/history">Threat Hunting</a>
                 <a href="/report" class="active">Reporting</a>
+                <a href="/threat-map">Threat Map</a>
                 <a href="/logout">Logout</a>
+                <button id="theme-toggle" class="badge"
+                    style="margin-left: 1.5rem; background: var(--glass-border); color: var(--text-primary); border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;">
+                    <i data-lucide="sun" id="theme-icon" style="width: 16px;"></i>
+                    <span id="theme-text">Light Mode</span>
+                </button>
             </nav>
         </header>
 
@@ -124,11 +130,11 @@
                     <tbody>
                         {% for l in logs %}
                         <tr>
-                            <td>{{ l[0] }}</td>
-                            <td>{{ l[1] }}</td>
-                            <td><span class="badge badge-{{ l[2]|lower }}">{{ l[2] }}</span></td>
-                            <td>{{ l[3] }}</td>
-                            <td>{{ l[4] }}</td>
+                            <td>{{ l.ip }}</td>
+                            <td>{{ l.attack }}</td>
+                            <td><span class="badge badge-{{ l.severity|lower }}">{{ l.severity }}</span></td>
+                            <td>{{ l.risk }}</td>
+                            <td>{{ l.time }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -138,6 +144,31 @@
     </div>
 
     <script>
+        // --- THEME ENGINE ---
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const themeText = document.getElementById('theme-text');
+        const html = document.documentElement;
+
+        function setTheme(theme) {
+            html.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            themeIcon.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
+            themeText.innerText = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+            lucide.createIcons();
+        }
+
+        if(themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                const currentTheme = html.getAttribute('data-theme');
+                setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+            });
+        }
+
+        // Initialize theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme);
+
         lucide.createIcons();
 
         // Data from backend

@@ -1,5 +1,5 @@
-from flask import Flask, request, jsonify, render_template
-from parent_database import init_parent_db, register_or_update_client, get_all_clients, delete_client, toggle_client_status
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for
+from core.parent_database import init_parent_db, register_or_update_client, get_all_clients, delete_client, toggle_client_status
 import datetime
 import threading
 import sqlite3
@@ -7,9 +7,10 @@ import requests
 import os
 import zipfile
 import io
+from config import Config
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get("FLASK_SECRET_KEY", "director-functional-fallback-key")
+app.config['SECRET_KEY'] = Config.SECRET_KEY
 
 _initialized = False
 IS_VERCEL = os.environ.get("VERCEL") == "1"
@@ -141,4 +142,4 @@ def push_update(client_id):
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5005)
+    app.run(host="0.0.0.0", port=Config.DIRECTOR_PORT)

@@ -3,9 +3,9 @@ import os
 import datetime
 
 # Configurations
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PARENT_DB_NAME = os.environ.get("PARENT_DB_PATH", os.path.join(_BASE_DIR, "parent.db"))
-DATABASE_URL = os.environ.get("DATABASE_URL") # Same URL or different can be used
+from config import Config
+PARENT_DB_NAME = Config.PARENT_DB_NAME
+DATABASE_URL = Config.DATABASE_URL
 
 def get_parent_connection():
     if DATABASE_URL and (DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://")):
@@ -18,8 +18,8 @@ def get_parent_connection():
     
     # Vercel Read-Only Protection
     if os.environ.get("VERCEL") == "1" and not DATABASE_URL:
-        print("[DIRECTOR DEMO] Running in Vercel Memory Mode.")
-        return sqlite3.connect(":memory:", check_same_thread=False)
+        print("[DIRECTOR DEMO] Running in Vercel. Using /tmp directory.")
+        return sqlite3.connect("/tmp/parent.db", check_same_thread=False)
 
     return sqlite3.connect(PARENT_DB_NAME, timeout=20)
 

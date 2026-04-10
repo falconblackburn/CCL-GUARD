@@ -2,7 +2,7 @@ import os
 import time
 import sqlite3
 import random
-from database import DB_NAME, insert_threat_intel
+from core.database import DB_NAME, insert_threat_intel
 
 class DetectionEngineeringAgent:
     """

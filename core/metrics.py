@@ -1,6 +1,6 @@
 import sqlite3
 import random
-from database import DB_NAME
+from core.database import DB_NAME
 
 def format_time(seconds):
     if not seconds: return "0s"

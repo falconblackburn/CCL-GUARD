@@ -85,6 +85,7 @@
                 <a href="/incidents">Incidents</a>
                 <a href="/history">Threat Hunting</a>
                 <a href="/report">Reporting</a>
+                <a href="/threat-map">Threat Map</a>
                 <a href="/logout">Logout</a>
                 <button id="theme-toggle" class="badge"
                     style="margin-left: 1.5rem; background: var(--glass-border); color: var(--text-primary); border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;">
@@ -192,14 +193,14 @@
                             <tbody>
                                 {% for log in logs %}
                                 <tr>
-                                    <td><span class="text-xs" style="color:var(--accent-blue)">{{ log[1] }}</span></td>
-                                    <td><code>{{ log[2] }}</code> <br> <span class="text-xs opacity-50">{{ log[3]
+                                    <td><span class="text-xs" style="color:var(--accent-blue)">{{ log.source }}</span></td>
+                                    <td><code>{{ log.ip }}</code> <br> <span class="text-xs opacity-50">{{ log.country
                                             }}</span></td>
-                                    <td><strong>{{ log[5] }}</strong> <br> <span class="text-xs opacity-50">Risk: {{
-                                            log[7] }}%</span></td>
-                                    <td><span class="badge badge-{{ log[6]|lower }}">{{ log[6] }}</span></td>
+                                    <td><strong>{{ log.attack }}</strong> <br> <span class="text-xs opacity-50">Risk: {{
+                                            log.risk }}%</span></td>
+                                    <td><span class="badge badge-{{ log.severity|lower }}">{{ log.severity }}</span></td>
                                     <td><button class="text-xs btn-link"
-                                            onclick="viewAnalysis('{{ log[0] }}')">Analyze</button></td>
+                                            onclick="viewAnalysis('{{ log.id }}')">Analyze</button></td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -379,7 +380,7 @@
         const topIpsData = {{ top_ips| tojson | safe }};
         const counts = {};
         logsData.forEach(l => {
-            const type = l[5];
+            const type = l.attack;
             counts[type] = (counts[type] || 0) + 1;
         });
 
@@ -502,11 +503,11 @@
             container.innerHTML = `
                 <div class="ai-report">
                     <h4><i data-lucide="bot" style="width:16px; margin-right:8px;"></i> AI THREAT ANALYSIS</h4>
-                    <p style="font-size: 0.875rem; line-height: 1.5;">${log[9]}</p>
+                    <p style="font-size: 0.875rem; line-height: 1.5;">${log.ai_analysis}</p>
                 </div>
                 <div class="ai-remediation">
                     <h4><i data-lucide="check-circle" style="width:16px; margin-right:8px;"></i> RECOMMENDED REMEDIATION</h4>
-                    <p style="font-size: 0.875rem; line-height: 1.5; white-space: pre-line;">${log[10]}</p>
+                    <p style="font-size: 0.875rem; line-height: 1.5; white-space: pre-line;">${log.remediation}</p>
                 </div>
                 <div class="mt-2" style="display:flex; justify-content: flex-end;">
                     <button class="badge" style="background: var(--accent-blue); color: white; border: none; cursor: pointer; padding: 0.5rem 1rem;">Deploy Remediation</button>

@@ -4,9 +4,9 @@ import datetime
 import time
 
 # Configurations
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_NAME = os.environ.get("DB_PATH", os.path.join(_BASE_DIR, "soc.db"))
-DATABASE_URL = os.environ.get("DATABASE_URL") # Postgres URL for Vercel/Cloud
+from config import Config
+DB_NAME = Config.DB_NAME
+DATABASE_URL = Config.DATABASE_URL
 
 def get_connection():
     """Returns a database connection (Postgres, SQLite, or Memory for Demo)."""
@@ -18,10 +18,10 @@ def get_connection():
         except ImportError:
             print("[DB ERROR] psycopg2 not found.")
     
-    # Vercel Read-Only Protection: Use memory if no DB_URL is provided in serverless env
+    # Vercel Read-Only Protection: Use /tmp if no DB_URL is provided in serverless env
     if os.environ.get("VERCEL") == "1" and not DATABASE_URL:
-        print("[SOC DEMO] Running in Vercel Memory Mode (Volatile).")
-        return sqlite3.connect(":memory:", check_same_thread=False)
+        print("[SOC DEMO] Running in Vercel. Using /tmp directory.")
+        return sqlite3.connect("/tmp/soc.db", check_same_thread=False)
 
     return sqlite3.connect(DB_NAME, timeout=20)
 
@@ -59,6 +59,7 @@ def init_db():
         attack {text_type},
         severity {text_type},
         risk INTEGER,
+        attacker_ip {text_type},
         phase {text_type},
         status {text_type} DEFAULT 'Open',
         ai_summary {text_type},
@@ -76,6 +77,16 @@ def init_db():
         password {text_type},
         role {text_type},
         is_first_login INTEGER DEFAULT 1
+    )''')
+
+    # Threat Feeds Table
+    c.execute(f'''CREATE TABLE IF NOT EXISTS threat_feeds (
+        id {auto_inc},
+        source {text_type},
+        indicator {text_type},
+        type {text_type},
+        description {text_type},
+        time TIMESTAMP DEFAULT {ts_default}
     )''')
 
     # 4. Seed Admin User if empty (Important for Memory Demo Mode)
@@ -127,15 +138,15 @@ def insert_logs_batch(batch):
     conn.commit()
     conn.close()
 
-def create_incident(attack, severity, risk, phase, ai_summary, remediation_steps, source="Unknown"):
+def create_incident(attack, severity, risk, phase, ai_summary, remediation_steps, source="Unknown", attacker_ip="Unknown"):
     conn = get_connection()
     c = conn.cursor()
     is_pg = (DATABASE_URL and "postgres" in DATABASE_URL)
     p = "%s" if is_pg else "?"
     
-    c.execute(f'''INSERT INTO incidents (attack, severity, risk, phase, status, ai_summary, remediation_steps, source)
-                  VALUES ({p}, {p}, {p}, {p}, 'Open', {p}, {p}, {p})''',
-              (attack, severity, risk, phase, ai_summary, remediation_steps, source))
+    c.execute(f'''INSERT INTO incidents (attack, severity, risk, phase, status, ai_summary, remediation_steps, source, attacker_ip)
+                  VALUES ({p}, {p}, {p}, {p}, 'Open', {p}, {p}, {p}, {p})''',
+              (attack, severity, risk, phase, ai_summary, remediation_steps, source, attacker_ip))
     conn.commit()
     conn.close()
 
@@ -190,18 +201,35 @@ def get_incident_stats():
     c = conn.cursor()
     c.execute("SELECT status, COUNT(*) FROM incidents GROUP BY status")
     stats = dict(c.fetchall())
+    
+    c.execute("SELECT COUNT(*) FROM incidents WHERE severity = 'Critical' AND status = 'Open'")
+    critical = c.fetchone()[0]
+
     conn.close()
     # Ensure keys exist
     return {
-        "Open": stats.get("Open", 0),
-        "In Progress": stats.get("In Progress", 0),
-        "Closed": stats.get("Closed", 0),
-        "total": sum(stats.values())
+        "open": stats.get("Open", 0),
+        "in_progress": stats.get("In Progress", 0),
+        "closed": stats.get("Closed", 0),
+        "total": sum(stats.values()),
+        "critical": critical
     }
 # --- ALIASES FOR BACKWARD COMPATIBILITY ---
 def fetch_logs(limit=100): return get_logs(limit)
 def mark_incident_processed(iid): return update_incident_status(iid, 'In Progress')
-def close_incident(iid): return update_incident_status(iid, 'Closed')
+def close_incident(incident_id, analyst='System', comment=''):
+    conn = get_connection()
+    c = conn.cursor()
+    import datetime
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    c.execute("""
+        UPDATE incidents 
+        SET status = 'Closed', analyst = ?, comment = ?, closed_time = ?
+        WHERE id = ?
+    """, (analyst, comment, now, incident_id))
+    conn.commit()
+    conn.close()
+    return True
 def fetch_logs_paged(offset, limit):
     conn = get_connection()
     c = conn.cursor()
@@ -210,3 +238,24 @@ def fetch_logs_paged(offset, limit):
     colnames = [desc[0] for desc in c.description]
     conn.close()
     return [dict(zip(colnames, row)) for row in rows]
+
+def insert_threat_intel(source, indicator, intel_type, description):
+    conn = get_connection()
+    c = conn.cursor()
+    is_pg = (DATABASE_URL and "postgres" in DATABASE_URL)
+    p = "%s" if is_pg else "?"
+    c.execute(f"INSERT INTO threat_feeds(source, indicator, type, description) VALUES({p},{p},{p},{p})",
+              (source, indicator, intel_type, description))
+    conn.commit()
+    conn.close()
+
+def fetch_threat_feeds():
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT * FROM threat_feeds ORDER BY id DESC LIMIT 50")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def connect_with_retry(timeout=10):
+    return get_connection()

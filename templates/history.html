@@ -21,6 +21,7 @@
                 <a href="/incidents">Incidents</a>
                 <a href="/history" class="active">Threat Hunting</a>
                 <a href="/report">Reporting</a>
+                <a href="/threat-map">Threat Map</a>
                 <a href="/logout">Logout</a>
                 <button id="theme-toggle" class="badge"
                     style="margin-left: 1.5rem; background: var(--glass-border); color: var(--text-primary); border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;">
@@ -96,15 +97,15 @@
         function renderLogs(data) {
             const tbody = document.getElementById('history-body');
             tbody.innerHTML = data.map(l => {
-                if (l.length < 10) return '';
+                if (!l || !l.id) return '';
                 return `
                 <tr>
-                    <td><span style="color:var(--accent-blue)">${l[1]}</span></td>
-                    <td><code>${l[2]}</code></td>
-                    <td>${l[5]}</td>
-                    <td><span class="badge badge-${(l[6] || 'low').toString().toLowerCase()}">${l[6]}</span></td>
-                    <td class="text-xs" style="max-width:500px; color: var(--text-secondary); white-space: pre-wrap;">${l[9] ? l[9] : 'N/A'}</td>
-                    <td class="text-xs">${l[13] || 'N/A'}</td>
+                    <td><span style="color:var(--accent-blue)">${l.source}</span></td>
+                    <td><code>${l.ip}</code></td>
+                    <td>${l.attack}</td>
+                    <td><span class="badge badge-${(l.severity || 'low').toString().toLowerCase()}">${l.severity}</span></td>
+                    <td class="text-xs" style="max-width:500px; color: var(--text-secondary); white-space: pre-wrap;">${l.ai_analysis ? l.ai_analysis : 'N/A'}</td>
+                    <td class="text-xs">${l.time || 'N/A'}</td>
                 </tr>
             `}).join('');
         }
@@ -112,10 +113,10 @@
         document.getElementById('search-input').addEventListener('input', (e) => {
             const term = e.target.value.toLowerCase();
             const filtered = logData.filter(l =>
-                l[1].toLowerCase().includes(term) ||
-                l[2].toLowerCase().includes(term) ||
-                l[5].toLowerCase().includes(term) ||
-                (l[9] && l[9].toLowerCase().includes(term))
+                (l.source && l.source.toLowerCase().includes(term)) ||
+                (l.ip && l.ip.toLowerCase().includes(term)) ||
+                (l.attack && l.attack.toLowerCase().includes(term)) ||
+                (l.ai_analysis && l.ai_analysis.toLowerCase().includes(term))
             );
             renderLogs(filtered);
         });

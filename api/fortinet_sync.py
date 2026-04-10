@@ -6,7 +6,7 @@ import time
 import threading
 import requests
 import json
-from database import insert_logs_batch, init_db, create_incident, DB_NAME
+from core.database import insert_logs_batch, init_db, create_incident, DB_NAME
 
 # Map Fortinet severity levels to CCL Guard Risk Levels
 SEVERITY_MAP = {

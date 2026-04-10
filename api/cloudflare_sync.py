@@ -2,7 +2,7 @@ import os
 import time
 import requests
 import datetime
-from database import insert_log
+from core.database import insert_log
 
 def fetch_cloudflare_logs():
     email = os.environ.get("CLOUDFLARE_EMAIL")

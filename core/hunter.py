@@ -4,9 +4,8 @@ import time
 import requests
 
 # DB path - must match database.py exactly
-# Use DB_PATH env var, or default to soc.db in the same directory as this script
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_NAME = os.environ.get("DB_PATH", os.path.join(_BASE_DIR, "soc.db"))
+from config import Config
+DB_NAME = Config.DB_NAME
 
 def agentic_hunt():
     """Proactively hunt for threats using AI reasoning."""
@@ -89,7 +88,7 @@ def agentic_hunt():
         if result.get("found"):
             print(f"[HUNTER] ANOMALY DETECTED: {result['pattern']}")
             # 4. Create a Proactive Incident
-            from database import create_incident
+            from core.database import create_incident
             create_incident(
                 attack=f"HUNT:{result['pattern'][:30]}",
                 severity=result["severity"],
