@@ -148,8 +148,10 @@ Write-Host "Setting up an automated secure tunnel for your SOC (No Port Forwardi
 $cloudflaredCmd = Get-Command "cloudflared" -ErrorAction SilentlyContinue
 if (-not $cloudflaredCmd) {
     if (-not (Test-Path "$PSScriptRoot\cloudflared.exe")) {
-        Write-Host "Downloading Cloudflared..."
+        Write-Host "Downloading Cloudflared (this may take a minute)..."
+        $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "$PSScriptRoot\cloudflared.exe"
+        $ProgressPreference = 'Continue'
     }
     $cloudflaredPath = "$PSScriptRoot\cloudflared.exe"
 } else {
