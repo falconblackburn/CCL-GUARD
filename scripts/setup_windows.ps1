@@ -1,6 +1,10 @@
 # CCL Guard - Windows Server Setup Script
 # This script automates the installation of dependencies and environment setup on Windows.
 
+# Robust paths
+$RootPath = Split-Path -Parent $PSScriptRoot
+Set-Location $RootPath
+
 Write-Host "[*] Starting CCL Guard Windows Setup..." -ForegroundColor Cyan
 
 # 1. Check for Python (try python, python3, then py)
@@ -44,7 +48,7 @@ Write-Host "[+] Dependencies installed successfully." -ForegroundColor Green
 
 # 4. Initialize Database & Generate Demo Data
 Write-Host "[*] Initializing database and generating demo data..."
-& ".\.venv\Scripts\python.exe" generate_test_data.py
+& ".\.venv\Scripts\python.exe" tests/generate_test_data.py
 
 # 5. Generate Secret Key
 if (-not $env:FLASK_SECRET_KEY) {
@@ -79,7 +83,7 @@ if ($Choice -eq "y") {
     $FortiChoice = Read-Host
     if ($FortiChoice -eq "y") {
         Write-Host "[*] Creating background task for Fortinet Sync..."
-        schtasks /create /tn "CCL_Guard_Fortinet" /tr "$PythonPath $CurrentDir\fortinet_sync.py --live" /sc onstart /ru SYSTEM /rl HIGHEST /f
+        schtasks /create /tn "CCL_Guard_Fortinet" /tr "$PythonPath $CurrentDir\api\fortinet_sync.py --live" /sc onstart /ru SYSTEM /rl HIGHEST /f
         schtasks /run /tn "CCL_Guard_Fortinet" # Start immediately
         Write-Host "[*] Configuring Firewall for Fortinet Syslog (UDP 5140)..."
         New-NetFirewallRule -DisplayName "CCL Guard Syslog" -Direction Inbound -LocalPort 5140 -Protocol UDP -Action Allow -ErrorAction SilentlyContinue
@@ -87,7 +91,7 @@ if ($Choice -eq "y") {
     
     # Task 4: Monitoring Agent
     Write-Host "[*] Creating background task for CCL Guard Agent..."
-    schtasks /create /tn "CCL_Guard_Agent" /tr "$PythonPath $CurrentDir\lightweight_agent.py" /sc onstart /ru SYSTEM /rl HIGHEST /f
+    schtasks /create /tn "CCL_Guard_Agent" /tr "$PythonPath $CurrentDir\scripts\lightweight_agent.py" /sc onstart /ru SYSTEM /rl HIGHEST /f
     schtasks /run /tn "CCL_Guard_Agent" # Start immediately
     
     # Global Firewall Rules

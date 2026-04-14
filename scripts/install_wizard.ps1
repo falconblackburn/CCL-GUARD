@@ -2,6 +2,23 @@ Write-Host "==========================================================" -Foregro
 Write-Host "   CCL Guard - Automated Installer & Setup Wizard (Windows)" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
+# Robust paths
+$RootPath = Split-Path -Parent $PSScriptRoot
+Set-Location $RootPath
+
+# Helper to update/set .env values cleanly
+function Update-Env($key, $value) {
+    if (-not $value) { return }
+    $envFile = Join-Path $RootPath ".env"
+    if (Test-Path $envFile) {
+        if (Select-String -Path $envFile -Pattern "^$key=") {
+            (Get-Content $envFile) -replace "^$key=.*", "$key=$value" | Set-Content $envFile
+            return
+        }
+    }
+    Add-Content -Path $envFile -Value "$key=$value"
+}
+
 Write-Host ""
 Write-Host "[1/4] Installing Backend Dependencies..." -ForegroundColor Yellow
 
@@ -43,12 +60,10 @@ Write-Host "1) Use Ollama (Local, 100% Free, Private)"
 Write-Host "2) Use Google Gemini (Cloud, API Key required)"
 $ai_choice = Read-Host "Choose AI Engine (1 or 2)"
 
-if ($ai_choice -eq "1") {
-    Add-Content -Path .env -Value "OLLAMA_MODEL=llama3"
+    Update-Env "OLLAMA_MODEL" "llama3"
     Write-Host "✅ Selected Ollama (Free Local AI)." -ForegroundColor Green
 } else {
-    $gemini_key = Read-Host "Enter your Gemini API Key"
-    Add-Content -Path .env -Value "GEMINI_API_KEY=$gemini_key"
+    Update-Env "GEMINI_API_KEY" $gemini_key
     Write-Host "✅ Selected Google Gemini." -ForegroundColor Green
 }
 
@@ -61,10 +76,10 @@ if ($wa_choice -eq "y") {
     $twilio_token = Read-Host "Enter Twilio Auth Token"
     $admin_wa = Read-Host "Enter Your Mobile Number (e.g. +1234567890)"
     
-    Add-Content -Path .env -Value "TWILIO_ACCOUNT_SID=$twilio_sid"
-    Add-Content -Path .env -Value "TWILIO_AUTH_TOKEN=$twilio_token"
-    Add-Content -Path .env -Value "TWILIO_WHATSAPP_ID=whatsapp:+14155238886"
-    Add-Content -Path .env -Value "ADMIN_WHATSAPP=$admin_wa"
+    Update-Env "TWILIO_ACCOUNT_SID" $twilio_sid
+    Update-Env "TWILIO_AUTH_TOKEN" $twilio_token
+    Update-Env "TWILIO_WHATSAPP_ID" "whatsapp:+14155238886"
+    Update-Env "ADMIN_WHATSAPP" $admin_wa
     Write-Host "✅ WhatsApp Configured." -ForegroundColor Green
 }
 
@@ -78,9 +93,9 @@ if ($cf_choice -eq "y") {
     $cf_api_key = Read-Host "Enter Cloudflare Global API Key"
     $cf_zone_id = Read-Host "Enter Cloudflare Zone ID (for the domain you want to monitor)"
     
-    Add-Content -Path .env -Value "CLOUDFLARE_EMAIL=$cf_email"
-    Add-Content -Path .env -Value "CLOUDFLARE_API_KEY=$cf_api_key"
-    Add-Content -Path .env -Value "CLOUDFLARE_ZONE_ID=$cf_zone_id"
+    Update-Env "CLOUDFLARE_EMAIL" $cf_email
+    Update-Env "CLOUDFLARE_API_KEY" $cf_api_key
+    Update-Env "CLOUDFLARE_ZONE_ID" $cf_zone_id
     Write-Host "✅ Cloudflare Log Ingestion Configured." -ForegroundColor Green
 }
 
@@ -96,9 +111,9 @@ if ($ent_choice -eq "y") {
         $aws_secret = Read-Host "Enter AWS Secret Access Key"
         $aws_region = Read-Host "Enter AWS Region (e.g., us-east-1)"
         if ([string]::IsNullOrWhiteSpace($aws_region)) { $aws_region = "us-east-1" }
-        Add-Content -Path .env -Value "AWS_ACCESS_KEY_ID=$aws_key"
-        Add-Content -Path .env -Value "AWS_SECRET_ACCESS_KEY=$aws_secret"
-        Add-Content -Path .env -Value "AWS_REGION=$aws_region"
+        Update-Env "AWS_ACCESS_KEY_ID" $aws_key
+        Update-Env "AWS_SECRET_ACCESS_KEY" $aws_secret
+        Update-Env "AWS_REGION" $aws_region
         Write-Host "✅ AWS GuardDuty Polling Configured." -ForegroundColor Green
     }
 
@@ -107,9 +122,9 @@ if ($ent_choice -eq "y") {
     if ([string]::IsNullOrWhiteSpace($az_tenant) -eq $false) {
         $az_client = Read-Host "Enter Azure Client ID"
         $az_secret = Read-Host "Enter Azure Client Secret"
-        Add-Content -Path .env -Value "AZURE_TENANT_ID=$az_tenant"
-        Add-Content -Path .env -Value "AZURE_CLIENT_ID=$az_client"
-        Add-Content -Path .env -Value "AZURE_CLIENT_SECRET=$az_secret"
+        Update-Env "AZURE_TENANT_ID" $az_tenant
+        Update-Env "AZURE_CLIENT_ID" $az_client
+        Update-Env "AZURE_CLIENT_SECRET" $az_secret
         Write-Host "✅ Azure Defender Polling Configured." -ForegroundColor Green
     }
 
@@ -117,8 +132,8 @@ if ($ent_choice -eq "y") {
     $splunk_host = Read-Host "Enter Splunk Host URL (Leave blank to skip Splunk)"
     if ([string]::IsNullOrWhiteSpace($splunk_host) -eq $false) {
         $splunk_token = Read-Host "Enter Splunk API Token"
-        Add-Content -Path .env -Value "SPLUNK_HOST=$splunk_host"
-        Add-Content -Path .env -Value "SPLUNK_TOKEN=$splunk_token"
+        Update-Env "SPLUNK_HOST" $splunk_host
+        Update-Env "SPLUNK_TOKEN" $splunk_token
         Write-Host "✅ Splunk SIEM Polling Configured." -ForegroundColor Green
     }
 }
@@ -166,12 +181,14 @@ if ($public_url) {
     Write-Host "✅ Public URL Generated: $public_url" -ForegroundColor Green
     # Use a helper to update/set .env values cleanly
     function Update-Env($key, $value) {
-        $envFile = Join-Path $PSScriptRoot ".env"
-        if (Select-String -Path $envFile -Pattern "^$key=") {
-            (Get-Content $envFile) -replace "^$key=.*", "$key=$value" | Set-Content $envFile
-        } else {
-            Add-Content -Path $envFile -Value "$key=$value"
+        $envFile = Join-Path $RootPath ".env"
+        if (Test-Path $envFile) {
+            if (Select-String -Path $envFile -Pattern "^$key=") {
+                (Get-Content $envFile) -replace "^$key=.*", "$key=$value" | Set-Content $envFile
+                return
+            }
         }
+        Add-Content -Path $envFile -Value "$key=$value"
     }
     Update-Env "CLIENT_PUBLIC_URL" "`"$public_url`""
 } else {
@@ -202,13 +219,14 @@ if ($public_url) {
 }
 Write-Host ""
 Write-Host "► BACKGROUND SERVICE: Registering as a Windows Startup Task..." -ForegroundColor Yellow
-$pythonPath = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
-$appPath = Join-Path $PSScriptRoot "app.py"
+$RootPath = Split-Path -Parent $PSScriptRoot
+$pythonPath = Join-Path $RootPath ".venv\Scripts\python.exe"
+$appPath = Join-Path $RootPath "app.py"
 $taskName = "CCL_Guard_SOC"
 
 try {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-    $action = New-ScheduledTaskAction -Execute $pythonPath -Argument "`"$appPath`"" -WorkingDirectory $PSScriptRoot
+    $action = New-ScheduledTaskAction -Execute $pythonPath -Argument "`"$appPath`"" -WorkingDirectory $RootPath
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -Hidden
     Register-ScheduledTask -Action $action -Trigger $trigger -Settings $settings -TaskName $taskName -User "SYSTEM" -RunLevel Highest -Force
