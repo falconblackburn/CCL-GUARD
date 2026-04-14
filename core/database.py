@@ -89,17 +89,8 @@ def init_db():
         time TIMESTAMP DEFAULT {ts_default}
     )''')
 
-    # 4. Seed Admin User if empty (Important for Memory Demo Mode)
-    try:
-        c.execute("SELECT COUNT(*) FROM users")
-        if c.fetchone()[0] == 0:
-            print("[DB SEED] Creating default admin user for demo...")
-            from werkzeug.security import generate_password_hash
-            hashed_pw = generate_password_hash("admin123")
-            c.execute("INSERT INTO users (username, password, role, is_first_login) VALUES (?, ?, ?, ?)",
-                      ("admin", hashed_pw, "admin", 0))
-    except Exception as e:
-        print(f"[DB WARNING] Seeding failed: {e}")
+    # 4. Seed Admin User if empty
+    create_default_user()
 
     # 5. Indexes for 5M+ scale
     try:
@@ -259,3 +250,20 @@ def fetch_threat_feeds():
 
 def connect_with_retry(timeout=10):
     return get_connection()
+def create_default_user():
+    """Seeds a default admin user if the table is empty."""
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COUNT(*) FROM users")
+        if c.fetchone()[0] == 0:
+            print("[DB SEED] Creating default admin user for demo...")
+            from werkzeug.security import generate_password_hash
+            hashed_pw = generate_password_hash("admin123")
+            c.execute("INSERT INTO users (username, password, role, is_first_login) VALUES (?, ?, ?, ?)",
+                      ("admin", hashed_pw, "admin", 0))
+            conn.commit()
+    except Exception as e:
+        print(f"[DB WARNING] Seeding failed: {e}")
+    finally:
+        conn.close()

@@ -1,6 +1,13 @@
 import sqlite3
 import os
-from database import DB_NAME, init_db
+import sys
+
+# Ensure the project root is in the path so we can import 'core' and 'config'
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from config import Config
+from core.database import init_db
+DB_NAME = Config.DB_NAME
 
 def clear_for_production():
     print(f"[*] WARNING: This will PERMANENTLY delete all demo data in {DB_NAME}")
@@ -16,7 +23,7 @@ def clear_for_production():
     init_db()
     
     # Create the default admin if it doesn't exist
-    from app import create_default_user
+    from core.database import create_default_user
     create_default_user()
     
     print("[SUCCESS] CCL Guard is now clean and ready.")
