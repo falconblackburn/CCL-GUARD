@@ -60,9 +60,11 @@ Write-Host "1) Use Ollama (Local, 100% Free, Private)"
 Write-Host "2) Use Google Gemini (Cloud, API Key required)"
 $ai_choice = Read-Host "Choose AI Engine (1 or 2)"
 
+if ($ai_choice -eq "1") {
     Update-Env "OLLAMA_MODEL" "llama3"
     Write-Host "✅ Selected Ollama (Free Local AI)." -ForegroundColor Green
 } else {
+    $gemini_key = Read-Host "Enter your Gemini API Key"
     Update-Env "GEMINI_API_KEY" $gemini_key
     Write-Host "✅ Selected Google Gemini." -ForegroundColor Green
 }
