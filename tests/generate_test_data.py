@@ -3,11 +3,10 @@ import random
 import datetime
 import os
 
-# Dynamically determine the DB path based on the OS
-if os.name == 'nt':
-    DB_NAME = os.path.join(os.environ.get('TEMP', 'C:\\temp'), "soc.db")
-else:
-    DB_NAME = "/tmp/soc.db"
+# Use centralized configuration
+from config import Config
+from core.database import init_db
+DB_NAME = Config.DB_NAME
 
 def generate_incidents():
     conn = sqlite3.connect(DB_NAME)
@@ -86,4 +85,6 @@ def generate_incidents():
     print("Successfully generated 11 incidents and 20 logs.")
 
 if __name__ == "__main__":
+    # Ensure tables exist before generating data
+    init_db()
     generate_incidents()

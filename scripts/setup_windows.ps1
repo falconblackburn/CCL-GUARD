@@ -48,6 +48,7 @@ Write-Host "[+] Dependencies installed successfully." -ForegroundColor Green
 
 # 4. Initialize Database & Generate Demo Data
 Write-Host "[*] Initializing database and generating demo data..."
+$env:PYTHONPATH = ".;./core;./api"
 & ".\.venv\Scripts\python.exe" tests/generate_test_data.py
 
 # 5. Generate Secret Key
@@ -56,7 +57,7 @@ if (-not $env:FLASK_SECRET_KEY) {
     [Reflection.Assembly]::LoadWithPartialName("System.Security") | Out-Null
     $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::Create()
     $rng.GetBytes($Bytes)
-    $SecretKey = [System.Convert]::ToHexString($Bytes)
+    $SecretKey = [BitConverter]::ToString($Bytes).Replace("-", "").ToLower()
     $env:FLASK_SECRET_KEY = $SecretKey
     Write-Host "[*] Generated dynamic FLASK_SECRET_KEY."
 }
