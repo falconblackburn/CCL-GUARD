@@ -1,6 +1,10 @@
 # CCL GUARD - Master Cleanup Utility (Windows)
 # This script will purge all existing data and logs for a 100% fresh installation.
 
+# Robust paths
+$RootPath = Split-Path -Parent $PSScriptRoot
+Set-Location $RootPath
+
 # 1. Stop all CCL Guard Background Tasks
 Write-Host "[*] Stopping background services..." -ForegroundColor Cyan
 schtasks /end /tn "CCL_Guard_App" 2>$null
